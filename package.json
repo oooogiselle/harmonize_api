@@ -1,0 +1,20 @@
+{
+    "name": "hello-api",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+      "start": "nodemon src/server.js --exec babel-node"
+    },
+    "dependencies": {
+      "cors": "^2.8.5",
+      "dotenv": "^16.4.3",
+      "express": "^4.19.2"
+    },
+    "devDependencies": {
+      "@babel/core": "^7.24.4",
+      "@babel/node": "^7.24.4",
+      "@babel/preset-env": "^7.24.4",
+      "nodemon": "^3.1.10"
+    }
+  }
+  
