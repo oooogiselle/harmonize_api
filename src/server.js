@@ -1,20 +1,38 @@
-import 'dotenv/config';            // <— reads .env when local
-import express from 'express';
-import cors    from 'cors';
-import { connectDB } from './db.js';
-import router  from './router.js';
+import express  from 'express';
+import mongoose from 'mongoose';
+import 'dotenv/config.js';
 
-const PORT = process.env.PORT || 9090;
+import Sample from './models/sample.model.js';
 
-await connectDB(process.env.MONGODB_URI);
+const PORT      = process.env.PORT || 8080;
+const MONGO_URI = process.env.MONGO_URI; 
+
+try {
+  await mongoose.connect(MONGO_URI);
+  console.log('Connected to MongoDB');
+} catch (err) {
+  console.error('MongoDB connection error:', err.message);
+  process.exit(1);
+}
 
 const app = express();
-app.use(cors());
 app.use(express.json());
-app.use('/api', router);
 
-app.get('/', (_, res) => res.send('API server running.'));
+app.get('/', (req, res) => {
+  res.send('Hello World!');
+});
+
+app.post('/samples', async (req, res) => {
+  try {
+    const doc = await Sample.create(req.body);
+    res.status(201).json(doc);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
