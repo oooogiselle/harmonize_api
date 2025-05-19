@@ -36,3 +36,12 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+app.get('/samples', async (req, res) => {
+    try {
+      const docs = await Sample.find();
+      res.json(docs);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
