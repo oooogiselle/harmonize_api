@@ -1,47 +1,26 @@
-import express  from 'express';
-import mongoose from 'mongoose';
-import 'dotenv/config.js';
+import express from 'express';
+import { connectDB } from './db.js';
 
-import Sample from './models/sample.model.js';
-
-const PORT      = process.env.PORT || 8080;
-const MONGO_URI = process.env.MONGO_URI; 
-
-try {
-  await mongoose.connect(MONGO_URI);
-  console.log('Connected to MongoDB');
-} catch (err) {
-  console.error('MongoDB connection error:', err.message);
-  process.exit(1);
-}
+import usersRouter   from './routes/users.js';
+import artistsRouter from './routes/artists.js';
+import tracksRouter  from './routes/tracks.js';
+import eventsRouter  from './routes/events.js';
+// import blendRouter   from './routes/blend.js';
+import spotifyRouter from './routes/spotify.js';
 
 const app = express();
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Hello World!');
+app.use('/users',   usersRouter);
+app.use('/artists', artistsRouter);
+app.use('/tracks',  tracksRouter);
+app.use('/events',  eventsRouter);
+// app.use('/blend',   blendRouter);
+app.use('/spotify', spotifyRouter);
+
+app.get('/', (_req,res) => res.send('Hello World'));   // keep your original test route
+
+const PORT = process.env.PORT || 8080;
+connectDB().then(() => {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });
-
-app.post('/samples', async (req, res) => {
-  try {
-    const doc = await Sample.create(req.body);
-    res.status(201).json(doc);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-app.get('/samples', async (req, res) => {
-    try {
-      const docs = await Sample.find();
-      res.json(docs);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  });

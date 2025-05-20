@@ -4,18 +4,18 @@
     "description": "Tiny Express + MongoDB + Mongoose API that says Hello World",
     "type": "module",
     "scripts": {
-      "dev": "nodemon src/server.js",
-      "start": "node src/server.js"
+        "dev": "nodemon src/server.js",
+        "start": "node src/server.js"
     },
     "keywords": [],
     "license": "MIT",
     "dependencies": {
-      "dotenv": "^16.4.0",
-      "express": "^4.19.2",
-      "mongoose": "^8.3.1"
+        "dotenv": "^16.4.0",
+        "express": "^4.19.2",
+        "mongoose": "^8.3.1",
+        "spotify-web-api-node": "^5.0.2"
     },
     "devDependencies": {
-      "nodemon": "^3.1.0"
+        "nodemon": "^3.1.0"
     }
-  }
-  
+}
