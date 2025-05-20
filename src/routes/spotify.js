@@ -54,4 +54,40 @@ router.get('/playlist/:id', async (req,res) => {
   } catch (err) { res.status(500).json({ msg:'Spotify error', err }); }
 });
 
+// routes/spotify.js - add a new route
+router.get('/track-analytics/:id', async (req, res) => {
+  try {
+    // Get track data
+    const data = await spotify.getTrack(req.params.id);
+    const track = data.body;
+    
+    // Get audio features which includes additional metrics
+    const features = await spotify.getAudioFeaturesForTrack(req.params.id);
+    
+    // Calculate estimated streams based on popularity and other factors
+    // This is still an estimation as Spotify doesn't expose actual stream counts via API
+    const estimatedStreams = calculateStreams(track.popularity, features.body);
+    
+    res.json({
+      ...track,
+      estimatedStreams
+    });
+  } catch (err) {
+    res.status(500).json({ msg: 'Spotify error', err });
+  }
+});
+
+// Helper function to estimate streams
+function calculateStreams(popularity, features) {
+  // More sophisticated algorithm could consider:
+  // - Track age
+  // - Artist popularity
+  // - Genre popularity
+  // - Audio features like danceability
+  
+  const baseStreams = popularity * 150000;
+  const modifier = (features.danceability + features.energy) / 2;
+  return Math.floor(baseStreams * (0.8 + modifier * 0.4));
+}
+
 export default router;

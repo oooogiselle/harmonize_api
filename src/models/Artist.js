@@ -1,14 +1,30 @@
 import mongoose from 'mongoose';
-const { Schema, model } = mongoose;
 
-const artistSchema = new Schema({
-  userId:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  artistName:{ type: String, required: true },
-  bio: String,
-  tags:  [String],
-  tracks:[{ type: Schema.Types.ObjectId, ref: 'Track' }],
-  merchLinks:[String],
-  profilePic:String
-}, { timestamps:true });
+const AlbumSchema = new mongoose.Schema({
+  id   : String,
+  name : String,
+  cover: String,
+  year : String,
+  images:[{ url:String }]
+}, { _id:false });
 
-export default model('Artist', artistSchema);
+const TrackSchema = new mongoose.Schema({
+  id  : String,
+  name: String,
+  popularity: Number,
+  album: {
+    images:[{ url:String }]
+  }
+}, { _id:false });
+
+const ArtistSchema = new mongoose.Schema({
+  artistName : String,
+  bio        : String,
+  spotifyId  : String,
+  profilePic : String,
+  followers  : [String],
+  albums     : [AlbumSchema],
+  topTracks  : [TrackSchema]
+});
+
+export default mongoose.model('Artist', ArtistSchema);
