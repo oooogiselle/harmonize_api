@@ -14,4 +14,42 @@ router.post('/', async (req,res) => {
   res.status(201).json(track);
 });
 
+router.patch('/:id/like', async (req, res) => {
+    const { userId } = req.body;
+    try {
+      const track = await Track.findByIdAndUpdate(
+        req.params.id,
+        { $addToSet: { likes: userId } },
+        { new: true }
+      );
+      res.json(track);
+    } catch (err) {
+      res.status(400).json({ msg: 'Like failed', err });
+    }
+  });
+  
+  router.patch('/:id/comment', async (req, res) => {
+    const { userId, content } = req.body;
+    try {
+      const track = await Track.findByIdAndUpdate(
+        req.params.id,
+        {
+          $push: {
+            comments: {
+              userId,
+              content,
+              timestamp: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+      res.json(track);
+    } catch (err) {
+      res.status(400).json({ msg: 'Comment failed', err });
+    }
+  });
+  
+  
 export default router;
+
