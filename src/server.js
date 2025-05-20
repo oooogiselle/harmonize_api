@@ -18,7 +18,7 @@ app.use('/events',  eventsRouter);
 app.use('/blend',   blendRouter);
 app.use('/spotify', spotifyRouter);
 
-app.get('/', (_req,res) => res.send('Hello World'));   // keep your original test route
+app.get('/', (_req,res) => res.send('Hello World'));
 
 const PORT = process.env.PORT || 8080;
 connectDB().then(() => {
