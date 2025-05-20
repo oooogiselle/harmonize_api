@@ -12,9 +12,17 @@ const userSchema = new Schema({
   playlists:      [{ type: Schema.Types.ObjectId, ref: 'Playlist' }],
   friends:        [{ type: Schema.Types.ObjectId, ref: 'User' }],
   location: {
-    city: String,
-    coordinates: { type: [Number], default: undefined }
-  }
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      required: true
+    },
+    city: String
+  }  
 }, { timestamps:true });
 
 userSchema.index({ location: '2dsphere' });

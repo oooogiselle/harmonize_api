@@ -19,4 +19,39 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.patch('/:id/favorite', async (req, res) => {
+    const { trackId } = req.body;
+    try {
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { $addToSet: { favoriteTracks: trackId } },
+        { new: true }
+      );
+      res.json(user);
+    } catch (err) {
+      res.status(400).json({ msg: 'Failed to add favorite track', err });
+    }
+  });
+
+  router.get('/:id', async (req, res) => {
+    const user = await User.findById(req.params.id)
+      .populate('favoriteTracks', 'title')
+      .populate('friends', 'username');
+    res.json(user);
+  });
+  
+  router.patch('/:id', async (req, res) => {
+    try {
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+      res.json(user);
+    } catch (err) {
+      res.status(400).json({ msg: 'Failed to update user', err });
+    }
+  });
+  
+  
 export default router;
