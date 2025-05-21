@@ -4,12 +4,16 @@ import Artist from '../models/Artist.js';
 
 const router = express.Router();
 
-/* ---------- Middleware: Inject your Spotify client with pre-set token ---------- */
 async function ensureToken(req, res, next) {
   try {
     const spotify = getSpotifyClient();
 
-    // ✅ Just attach the instance with your hardcoded token
+    if (spotify.getAccessToken() && !spotify.isAccessTokenExpired()) {
+      req.spotify = spotify;
+      return next();
+    }
+    const { body } = await spotify.clientCredentialsGrant();
+    spotify.setAccessToken(body.access_token);
     req.spotify = spotify;
     next();
   } catch (e) {
@@ -18,7 +22,7 @@ async function ensureToken(req, res, next) {
   }
 }
 
-/* ---------- /artists/search?query=... ---------- */
+/* ── SEARCH ────────────────────────────────────────────────────────── */
 router.get('/artists/search', ensureToken, async (req, res) => {
   const q = req.query.query;
   if (!q) return res.status(400).json({ error: 'query required' });
@@ -37,10 +41,9 @@ router.get('/artists/search', ensureToken, async (req, res) => {
   }
 });
 
-/* ---------- /artists/spotify/:id ---------- */
 router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
-  const { id } = req.params;
-  const spotify = req.spotify;
+  const { id }    = req.params;
+  const spotify   = req.spotify;
 
   try {
     const { body: art } = await spotify.getArtist(id);
@@ -56,22 +59,24 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
       }
     }));
 
-    let albums = [];
-    let next = null;
-    do {
-      const { body } = next
-        ? await spotify.getGeneric(next)
-        : await spotify.getArtistAlbums(id, {
-            include_groups: 'album,single',
-            limit: 50,
-            market: 'US',
-          });
-      albums = albums.concat(body.items);
-      next = body.next;
-    } while (next);
 
-    const seen = new Set();
-    const cleanAlbums = albums
+    let albums = [];
+    let offset = 0;
+    let page;
+    do {
+      page = await spotify.getArtistAlbums(id, {
+        include_groups: 'album,single',
+        limit: 50,
+        market: 'US',
+        offset,
+      });
+      albums = albums.concat(page.body.items);
+      offset += 50;
+    } while (page.body.next);
+
+    /* dedupe by lowercase name */
+    const seen  = new Set();
+    const clean = albums
       .filter(a => {
         const key = a.name.toLowerCase();
         if (seen.has(key)) return false;
@@ -85,17 +90,24 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
         images: a.images,
       }));
 
-    const payload = {
-      spotifyId: id,
-      artistName: art.name,
-      profilePic: art.images[0]?.url ?? null,
-      topTracks,
-      albums: cleanAlbums,
-      bio: '',
-      followers: [],
-    };
+      const existing = await Artist.findOne({ spotifyId: id });
+      
+          const payload = {
+            spotifyId:  id,
+            artistName: art.name,
+            profilePic: art.images[0]?.url ?? null,
+            topTracks,
+            albums:     clean,
+            bio:        existing?.bio       ?? '',       
+            followers:  existing?.followers ?? [],         
+          };
+      
+          await Artist.findOneAndUpdate(
+            { spotifyId: id },
+            payload,
+            { upsert: true, new: true }
+          );
 
-    await Artist.findOneAndUpdate({ spotifyId: id }, payload, { upsert: true, new: true });
     res.json(payload);
   } catch (e) {
     console.error(e);
@@ -103,25 +115,26 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
   }
 });
 
-/** ---------- /spotify/recent ---------- */
-router.get('/recent', ensureToken, async (req, res) => {
-  try {
-    const data = await req.spotify.getMyRecentlyPlayedTracks({ limit: 10 });
-    res.json(data.body.items);
-  } catch (err) {
-    console.error('Error fetching recent tracks:', err);
-    res.status(500).json({ msg: 'Spotify error', err });
-  }
-});
 
-/** ---------- /spotify/top-artists ---------- */
-router.get('/top-artists', ensureToken, async (req, res) => {
+router.patch('/artists/:id/follow', async (req, res) => {
+  const { id }   = req.params;          
+  const userId   = req.get('x-user-id') || '682bf5ec57acfd1e97d85d8e';
+
   try {
-    const data = await req.spotify.getMyTopArtists({ limit: 10 });
-    res.json(data.body.items);
-  } catch (err) {
-    console.error('Error fetching top artists:', err);
-    res.status(500).json({ msg: 'Spotify error', err });
+    const artist = await Artist.findOne({ spotifyId: id });
+    if (!artist) return res.status(404).json({ error: 'Artist not found' });
+
+    const idx = artist.followers.indexOf(userId);
+    if (idx === -1) {
+      artist.followers.push(userId);              
+    } else {
+      artist.followers.splice(idx, 1);              
+    }
+    await artist.save();
+    res.json({ followers: artist.followers });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Follow update failed' });
   }
 });
 

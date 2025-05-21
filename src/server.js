@@ -1,11 +1,9 @@
-// src/server.js
 import dotenv from 'dotenv';
 import tilesRouter from './routes/tiles.js';
 dotenv.config();
 
-// --- fail fast if env not loaded ---
 if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
-  console.error('❌  SPOTIFY credentials not loaded – check your .env file');
+  console.error('SPOTIFY credentials not loaded – check your .env file');
   process.exit(1);
 }
 

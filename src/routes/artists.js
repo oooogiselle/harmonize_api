@@ -4,13 +4,11 @@ import spotify from '../spotifyClient.js';
 
 const router = Router();
 
-// POST /artists
 router.post('/', async (req, res) => {
   const artist = await Artist.create(req.body);
   res.status(201).json(artist);
 });
 
-// PATCH /artists/:id — to update fields like spotifyId
 router.patch('/:id', async (req, res) => {
   try {
     const artist = await Artist.findByIdAndUpdate(
@@ -30,35 +28,28 @@ router.get('/:id', async (req, res) => {
     const artist = await Artist.findById(req.params.id);
     if (!artist) return res.status(404).json({ msg: 'Artist not found' });
 
-    // Add debugging to check for spotifyId
     console.log(`Artist ${artist.artistName} has spotifyId: ${artist.spotifyId || 'none'}`);
 
-    // If no profile pic is set or it's the placeholder, try to find one by name
     if (!artist.profilePic || artist.profilePic === "https://link.to/image.jpg") {
       try {
-        // Try to search Spotify by name if no spotifyId is set
         if (!artist.spotifyId) {
           const searchResult = await spotify.searchArtists(artist.artistName, { limit: 1 });
           if (searchResult.body.artists.items.length > 0) {
             const topResult = searchResult.body.artists.items[0];
             
-            // Set the spotify ID for future use
             artist.spotifyId = topResult.id;
             console.log(`Found spotifyId: ${topResult.id} for artist: ${artist.artistName}`);
             
-            // Set the profile pic if available
             if (topResult.images && topResult.images.length > 0) {
               artist.profilePic = topResult.images[0].url;
               console.log(`Updated profile pic to: ${artist.profilePic}`);
             }
             
-            // Save the updated artist with spotifyId and possibly new profile pic
             await artist.save();
           }
         }
       } catch (searchErr) {
         console.error('[Spotify Search Error]', searchErr.message);
-        // Continue execution - this search is just a fallback
       }
     }
 
@@ -72,7 +63,6 @@ router.get('/:id', async (req, res) => {
           spotify.getArtistTopTracks(artist.spotifyId, 'US')
         ]);
 
-        // Log what we get back from Spotify for debugging
         console.log(`Spotify artist response image count: ${spArtist.body.images?.length || 0}`);
         if (spArtist.body.images?.[0]) {
           console.log(`First image URL: ${spArtist.body.images[0].url}`);
@@ -101,7 +91,6 @@ router.get('/:id', async (req, res) => {
         await artist.save();
       } catch (spotifyErr) {
         console.error('[Spotify Error]', spotifyErr.message);
-        // Include more details about the error for debugging
         if (spotifyErr.statusCode) {
           console.error(`Spotify API returned status code: ${spotifyErr.statusCode}`);
         }
@@ -110,7 +99,6 @@ router.get('/:id', async (req, res) => {
       console.log(`No Spotify ID found for artist: ${artist.artistName}. Add a spotifyId to enable Spotify integration.`);
     }
 
-    // Always return the artist data we have, even if Spotify enrichment fails
     res.json(artist);
   } catch (err) {
     console.error('[Server Error]', err);
@@ -123,7 +111,6 @@ router.patch('/:id/follow', async (req, res) => {
   const artist = await Artist.findById(req.params.id);
   if (!artist) return res.status(404).json({ msg: 'Artist not found' });
 
-  // Initialize followers array if it doesn't exist
   if (!artist.followers) artist.followers = [];
 
   const idx = artist.followers.indexOf(me);
@@ -144,5 +131,24 @@ router.get('/test/spotify/:id', async (req, res) => {
     res.status(500).json({ msg: 'Spotify fetch failed', err: err.message });
   }
 });
+
+router.patch('/artists/:id/bio', async (req, res) => {
+  const { id } = req.params;
+  const { bio } = req.body;
+
+  try {
+    const artist = await Artist.findOneAndUpdate(
+      { spotifyId: id },
+      { bio },
+      { new: true }
+    );
+    if (!artist) return res.status(404).json({ error: 'Artist not found' });
+    res.json({ bio: artist.bio });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Bio update failed' });
+  }
+});
+
 
 export default router;
