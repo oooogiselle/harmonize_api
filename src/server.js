@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import tilesRouter from './routes/tiles.js';
 dotenv.config();
 
 if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
@@ -13,6 +14,7 @@ import session  from 'cookie-session';
 
 import spotifyRoutes from './routes/spotify.js';
 import authRoutes    from './routes/auth.js';
+
 
 const app = express();
 
@@ -34,9 +36,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-
-
+app.use(cors());
+app.use('/api/auth', authRoutes);
+app.use('/api/tiles', tilesRouter);
 app.use('/',    spotifyRoutes);
 app.use('/auth', authRoutes);
 app.use('/api',  authRoutes);
