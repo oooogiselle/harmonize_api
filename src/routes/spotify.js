@@ -8,13 +8,10 @@ async function ensureToken(req, res, next) {
   try {
     const spotify = getSpotifyClient();
 
-    if (spotify.getAccessToken() && !spotify.isAccessTokenExpired()) {
-      req.spotify = spotify;
-      return next();
-    }
     const { body } = await spotify.clientCredentialsGrant();
     spotify.setAccessToken(body.access_token);
     req.spotify = spotify;
+
     next();
   } catch (e) {
     console.error('Spotify auth failed:', e);
