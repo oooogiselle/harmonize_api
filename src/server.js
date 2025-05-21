@@ -1,5 +1,6 @@
 // src/server.js
 import dotenv from 'dotenv';
+import tilesRouter from './routes/tiles.js';
 dotenv.config();
 
 // --- fail fast if env not loaded ---
@@ -12,12 +13,18 @@ import express  from 'express';
 import mongoose from 'mongoose';
 import cors     from 'cors';
 import spotifyRoutes from './routes/spotify.js';
+import authRoutes from './routes/auth.js';
+
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(cors());
+app.use('/api/auth', authRoutes);
+app.use('/api/tiles', tilesRouter);
 
-app.use('/', spotifyRoutes);
+
+app.use('/spotify', spotifyRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✓ MongoDB connected'))

@@ -1,26 +1,19 @@
-// src/routes/spotify.js
 import express from 'express';
 import { getSpotifyClient } from '../spotifyClient.js';
-import Artist from '../models/Artist.js';          // adjust to your model path
+import Artist from '../models/Artist.js';
 
 const router = express.Router();
 
-/* ---------- Token guardian attaches spotify instance to req ---------- */
+/* ---------- Middleware: Inject your Spotify client with pre-set token ---------- */
 async function ensureToken(req, res, next) {
   try {
-    const spotify = getSpotifyClient();            // <- build AFTER .env is ready
+    const spotify = getSpotifyClient();
 
-    if (spotify.getAccessToken() && !spotify.isAccessTokenExpired()) {
-      req.spotify = spotify;
-      return next();
-    }
-
-    const { body } = await spotify.clientCredentialsGrant();
-    spotify.setAccessToken(body.access_token);
+    // ✅ Just attach the instance with your hardcoded token
     req.spotify = spotify;
     next();
   } catch (e) {
-    console.error(e);
+    console.error('Spotify auth failed:', e);
     res.status(500).json({ error: 'Spotify auth failed' });
   }
 }
@@ -44,27 +37,27 @@ router.get('/artists/search', ensureToken, async (req, res) => {
   }
 });
 
-/* ---------- /artists/spotify/:id  (full import & cache) ---------- */
+/* ---------- /artists/spotify/:id ---------- */
 router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
   const { id } = req.params;
   const spotify = req.spotify;
 
   try {
-    /* profile */
     const { body: art } = await spotify.getArtist(id);
-
-    /* top tracks */
     const { body: { tracks } } = await spotify.getArtistTopTracks(id, 'US');
+
     const topTracks = tracks.map(t => ({
-      id:   t.id,
+      id: t.id,
       name: t.name,
       popularity: t.popularity,
-      album: { name: t.album.name, images: t.album.images }
+      album: {
+        name: t.album.name,
+        images: t.album.images,
+      }
     }));
 
-    /* albums & singles (deduped) */
     let albums = [];
-    let next   = null;
+    let next = null;
     do {
       const { body } = next
         ? await spotify.getGeneric(next)
@@ -74,7 +67,7 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
             market: 'US',
           });
       albums = albums.concat(body.items);
-      next   = body.next;
+      next = body.next;
     } while (next);
 
     const seen = new Set();
@@ -86,29 +79,49 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
         return true;
       })
       .map(a => ({
-        id:   a.id,
+        id: a.id,
         name: a.name,
         year: a.release_date.split('-')[0],
         images: a.images,
       }));
 
     const payload = {
-      spotifyId:  id,
+      spotifyId: id,
       artistName: art.name,
       profilePic: art.images[0]?.url ?? null,
       topTracks,
-      albums:     cleanAlbums,
-      bio:        '',
-      followers:  [],
+      albums: cleanAlbums,
+      bio: '',
+      followers: [],
     };
 
-    /* cache in Mongo for faster repeat loads */
     await Artist.findOneAndUpdate({ spotifyId: id }, payload, { upsert: true, new: true });
-
     res.json(payload);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Spotify artist fetch failed' });
+  }
+});
+
+/** ---------- /spotify/recent ---------- */
+router.get('/recent', ensureToken, async (req, res) => {
+  try {
+    const data = await req.spotify.getMyRecentlyPlayedTracks({ limit: 10 });
+    res.json(data.body.items);
+  } catch (err) {
+    console.error('Error fetching recent tracks:', err);
+    res.status(500).json({ msg: 'Spotify error', err });
+  }
+});
+
+/** ---------- /spotify/top-artists ---------- */
+router.get('/top-artists', ensureToken, async (req, res) => {
+  try {
+    const data = await req.spotify.getMyTopArtists({ limit: 10 });
+    res.json(data.body.items);
+  } catch (err) {
+    console.error('Error fetching top artists:', err);
+    res.status(500).json({ msg: 'Spotify error', err });
   }
 });
 
