@@ -10,19 +10,39 @@ if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
 import express  from 'express';
 import mongoose from 'mongoose';
 import cors     from 'cors';
+import session  from 'cookie-session';
+
 import spotifyRoutes from './routes/spotify.js';
-import authRoutes from './routes/auth.js';
+import authRoutes    from './routes/auth.js';
 
 
 const app = express();
-app.use(cors());
+
+app.use(
+  session({
+    name: 'session',
+    secret: process.env.SESSION_SECRET || 'default-secret',
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
+  })
+);
+
+app.use(cors({
+  origin: [
+    'http://127.0.0.1:5173',
+    'http://localhost:5173',
+  ],
+  credentials: true,
+}));
+
 app.use(express.json());
 app.use(cors());
 app.use('/api/auth', authRoutes);
 app.use('/api/tiles', tilesRouter);
+app.use('/',    spotifyRoutes);
+app.use('/auth', authRoutes);
+app.use('/api',  authRoutes);
 
-
-app.use('/spotify', spotifyRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✓ MongoDB connected'))
