@@ -1,20 +1,24 @@
-import 'dotenv/config';            // <— reads .env when local
-import express from 'express';
-import cors    from 'cors';
-import { connectDB } from './db.js';
-import router  from './router.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const PORT = process.env.PORT || 9090;
+if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+  console.error('SPOTIFY credentials not loaded – check your .env file');
+  process.exit(1);
+}
 
-await connectDB(process.env.MONGODB_URI);
+import express  from 'express';
+import mongoose from 'mongoose';
+import cors     from 'cors';
+import spotifyRoutes from './routes/spotify.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/api', router);
 
-app.get('/', (_, res) => res.send('API server running.'));
+app.use('/', spotifyRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✓ MongoDB connected'))
+  .catch(err => console.error('MongoDB error:', err));
+
+app.listen(8080, () => console.log('Server running on port 8080'));
