@@ -1,12 +1,9 @@
-// add-spotify-id.js
-// Run this script to update your test artist with a Spotify ID
-
 import mongoose from 'mongoose';
 import Artist from './models/Artist.js';
 import { connectDB } from './db.js';
 
-const artistId = '682bf9f0d8dee0de66ba4825'; // Your test artist ID
-const spotifyId = '5INjqkS1o8h1imAzPqGZBb';  // Tame Impala's Spotify ID
+const artistId = '682bf9f0d8dee0de66ba4825';
+const spotifyId = '5INjqkS1o8h1imAzPqGZBb';
 
 async function updateArtist() {
   try {
@@ -19,7 +16,6 @@ async function updateArtist() {
       process.exit(1);
     }
     
-    // Update the artist with the Spotify ID
     artist.spotifyId = spotifyId;
     await artist.save();
     
