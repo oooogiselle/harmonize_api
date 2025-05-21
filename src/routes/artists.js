@@ -91,7 +91,6 @@ router.get('/:id', async (req, res) => {
         await artist.save();
       } catch (spotifyErr) {
         console.error('[Spotify Error]', spotifyErr.message);
-        // Include more details about the error for debugging
         if (spotifyErr.statusCode) {
           console.error(`Spotify API returned status code: ${spotifyErr.statusCode}`);
         }
@@ -132,5 +131,24 @@ router.get('/test/spotify/:id', async (req, res) => {
     res.status(500).json({ msg: 'Spotify fetch failed', err: err.message });
   }
 });
+
+router.patch('/artists/:id/bio', async (req, res) => {
+  const { id } = req.params;
+  const { bio } = req.body;
+
+  try {
+    const artist = await Artist.findOneAndUpdate(
+      { spotifyId: id },
+      { bio },
+      { new: true }
+    );
+    if (!artist) return res.status(404).json({ error: 'Artist not found' });
+    res.json({ bio: artist.bio });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Bio update failed' });
+  }
+});
+
 
 export default router;

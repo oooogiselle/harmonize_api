@@ -91,18 +91,23 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
         images: a.images,
       }));
 
-    const payload = {
-      spotifyId:  id,
-      artistName: art.name,
-      profilePic: art.images[0]?.url ?? null,
-      topTracks,
-      albums:     clean,
-      bio:        '',
-      followers:  [],
-    };
-
-    /* cache in Mongo */
-    await Artist.findOneAndUpdate({ spotifyId: id }, payload, { upsert: true, new: true });
+      const existing = await Artist.findOne({ spotifyId: id });
+      
+          const payload = {
+            spotifyId:  id,
+            artistName: art.name,
+            profilePic: art.images[0]?.url ?? null,
+            topTracks,
+            albums:     clean,
+            bio:        existing?.bio       ?? '',       
+            followers:  existing?.followers ?? [],         
+          };
+      
+          await Artist.findOneAndUpdate(
+            { spotifyId: id },
+            payload,
+            { upsert: true, new: true }
+          );
 
     res.json(payload);
   } catch (e) {
@@ -111,13 +116,10 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
   }
 });
 
-/* ── FOLLOW / UNFOLLOW TOGGLE ────────────────────────────────────────
-   Expects header  x-user-id: <currentUserId>
-   (Front-end can keep hard-coded ID or add this header later.)
-───────────────────────────────────────────────────────────────────── */
+
 router.patch('/artists/:id/follow', async (req, res) => {
-  const { id }   = req.params;                        // Spotify artist ID
-  const userId   = req.get('x-user-id') || '682bf5ec57acfd1e97d85d8e'; // fallback demo ID
+  const { id }   = req.params;          
+  const userId   = req.get('x-user-id') || '682bf5ec57acfd1e97d85d8e';
 
   try {
     const artist = await Artist.findOne({ spotifyId: id });
@@ -125,9 +127,9 @@ router.patch('/artists/:id/follow', async (req, res) => {
 
     const idx = artist.followers.indexOf(userId);
     if (idx === -1) {
-      artist.followers.push(userId);                  // follow
+      artist.followers.push(userId);              
     } else {
-      artist.followers.splice(idx, 1);                // unfollow
+      artist.followers.splice(idx, 1);              
     }
     await artist.save();
     res.json({ followers: artist.followers });
