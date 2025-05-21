@@ -1,28 +1,26 @@
-import express from 'express';
-import cors from 'cors';
-import { connectDB } from './db.js';
+// src/server.js
+import dotenv from 'dotenv';
+dotenv.config();
 
-import usersRouter   from './routes/users.js';
-import artistsRouter from './routes/artists.js';
-import tracksRouter  from './routes/tracks.js';
-import eventsRouter  from './routes/events.js';
-import blendRouter   from './routes/blend.js';
-import spotifyRouter from './routes/spotify.js';
+// --- fail fast if env not loaded ---
+if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+  console.error('❌  SPOTIFY credentials not loaded – check your .env file');
+  process.exit(1);
+}
+
+import express  from 'express';
+import mongoose from 'mongoose';
+import cors     from 'cors';
+import spotifyRoutes from './routes/spotify.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use('/users',   usersRouter);
-app.use('/artists', artistsRouter);
-app.use('/tracks',  tracksRouter);
-app.use('/events',  eventsRouter);
-app.use('/blend',   blendRouter);
-app.use('/spotify', spotifyRouter);
+app.use('/', spotifyRoutes);
 
-app.get('/', (_req,res) => res.send('Hello World'));
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✓ MongoDB connected'))
+  .catch(err => console.error('MongoDB error:', err));
 
-const PORT = process.env.PORT || 8080;
-connectDB().then(() => {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-});
+app.listen(8080, () => console.log('Server running on port 8080'));
