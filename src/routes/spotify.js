@@ -4,7 +4,6 @@ import Artist from '../models/Artist.js';
 
 const router = express.Router();
 
-/* ── middleware: attaches fresh spotify client + token ─────────────── */
 async function ensureToken(req, res, next) {
   try {
     const spotify = getSpotifyClient();
@@ -18,7 +17,7 @@ async function ensureToken(req, res, next) {
     req.spotify = spotify;
     next();
   } catch (e) {
-    console.error(e);
+    console.error('Spotify auth failed:', e);
     res.status(500).json({ error: 'Spotify auth failed' });
   }
 }
@@ -42,22 +41,22 @@ router.get('/artists/search', ensureToken, async (req, res) => {
   }
 });
 
-/* ── FULL IMPORT & CACHE ───────────────────────────────────────────── */
 router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
   const { id }    = req.params;
   const spotify   = req.spotify;
 
   try {
-    /* profile */
     const { body: art } = await spotify.getArtist(id);
-
-    /* top tracks */
     const { body: { tracks } } = await spotify.getArtistTopTracks(id, 'US');
+
     const topTracks = tracks.map(t => ({
-      id:   t.id,
+      id: t.id,
       name: t.name,
       popularity: t.popularity,
-      album: { name: t.album.name, images: t.album.images }
+      album: {
+        name: t.album.name,
+        images: t.album.images,
+      }
     }));
 
 
@@ -85,7 +84,7 @@ router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
         return true;
       })
       .map(a => ({
-        id:   a.id,
+        id: a.id,
         name: a.name,
         year: a.release_date.split('-')[0],
         images: a.images,
