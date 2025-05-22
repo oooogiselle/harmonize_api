@@ -1,43 +1,53 @@
 //  ── deps:  npm i spotify-web-api-node uuid cookie-session dotenv
-import express from "express";
-import SpotifyWebApi from "spotify-web-api-node";
-import { v4 as uuid } from "uuid";
-import User from "../models/User.js";
-import tokenStore from "../utils/tokenStore.js";
+import express        from 'express';
+import SpotifyWebApi  from 'spotify-web-api-node';
+import { v4 as uuid } from 'uuid';
+import dotenv         from 'dotenv';
 
+import User       from '../models/User.js';
+import tokenStore from '../utils/tokenStore.js';
+
+dotenv.config();
 const router = express.Router();
+
+const {
+  SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET,
+  SPOTIFY_REDIRECT_URI,
+  FRONTEND_BASE_URL = 'http://localhost:5173',
+} = process.env;
 
 function buildSpotify() {
   return new SpotifyWebApi({
-    clientId:     process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-    redirectUri:  process.env.SPOTIFY_REDIRECT_URI,
+    clientId:     SPOTIFY_CLIENT_ID,
+    clientSecret: SPOTIFY_CLIENT_SECRET,
+    redirectUri:  SPOTIFY_REDIRECT_URI,
   });
 }
 
-const SCOPES = [
-  "user-read-email",
-  "user-read-private",
-  "user-top-read",
-  "user-read-recently-played",
-];
+// ─────────────  login (step 1) ─────────────
+router.get('/login', (_req, res) => {
+  const spotifyApi  = buildSpotify();
+  const state       = uuid();
+  const authorizeURL = spotifyApi.createAuthorizeURL(
+    [
+      'user-read-email',
+      'user-read-private',
+      'user-read-recently-played',
+      'user-top-read',
+    ],
+    state,
+  );
 
-/* ── 1. /auth/spotify/login  →  redirect to Spotify ─────────────────────── */
-router.get("/spotify/login", (req, res) => {
-  const spotifyApi = buildSpotify(); // <- defined above with redirectUri
-
-  const state = uuid();
-  req.session.spotifyState = state;
-
-  const authorizeURL = spotifyApi.createAuthorizeURL(SCOPES, state);
-  console.log("🔗 Redirecting to Spotify:", authorizeURL); // <-- ADD THIS
-
+  _req.session.spotifyState = state;
   res.redirect(authorizeURL);
 });
 
-router.get("/spotify/callback", async (req, res, next) => {
+// ─────────────  Spotify callback (step 2) ─────────────
+router.get('/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
-  if (state !== req.session.spotifyState) return res.status(400).send("State mismatch");
+  if (state !== req.session.spotifyState)
+    return res.status(400).send('State mismatch');
 
   const spotifyApi = buildSpotify();
 
@@ -46,19 +56,19 @@ router.get("/spotify/callback", async (req, res, next) => {
     const { access_token, refresh_token, expires_in } = body;
 
     spotifyApi.setAccessToken(access_token);
-    const me = await spotifyApi.getMe();
+    const { body: me } = await spotifyApi.getMe();
 
     const user = await User.findOneAndUpdate(
-      { spotifyId: me.body.id },
+      { spotifyId: me.id },
       {
-        spotifyId:   me.body.id,
-        username:    me.body.display_name,
-        displayName: me.body.display_name,
-        photo:       me.body.images?.[0]?.url ?? "",
-        email:       me.body.email,
-        country:     me.body.country,
+        spotifyId:    me.id,
+        username:     me.display_name,
+        displayName:  me.display_name,
+        photo:        me.images?.[0]?.url ?? '',
+        email:        me.email,
+        country:      me.country,
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
 
     tokenStore.save(user._id.toString(), {
@@ -68,51 +78,11 @@ router.get("/spotify/callback", async (req, res, next) => {
     });
 
     req.session.userId = user._id;
-    const redirectFrontend = process.env.NODE_ENV === 'production'
-    ? 'https://project-music-and-memories.onrender.com'
-    : 'http://127.0.0.1:5173/';
-
-    res.redirect(redirectFrontend);
+    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (e) {
-    console.error("Spotify callback error:", e.body || e.message || e);
-    res.status(500).send("Spotify authorization failed");
+    console.error('Spotify callback error:', e.body || e.message || e);
+    res.status(500).send('Spotify authorization failed');
   }
-});
-
-
-
-router.get("/me/spotify", async (req, res) => {
-  const uid = req.session.userId;
-  if (!uid) return res.status(401).json({ error: "Not signed in" });
-
-  const tokens = tokenStore.get(uid);
-  if (!tokens) return res.status(401).json({ error: "No token" });
-
-  const spotifyApi = buildSpotify();
-  spotifyApi.setAccessToken(tokens.access_token);
-  spotifyApi.setRefreshToken(tokens.refresh_token);
-
-  /* refresh automatically if needed */
-  if (Date.now() >= tokens.expires_at) {
-    const { body } = await spotifyApi.refreshAccessToken();
-    tokens.access_token = body.access_token;
-    tokens.expires_at   = Date.now() + body.expires_in * 1000;
-    tokenStore.save(uid, tokens);
-    spotifyApi.setAccessToken(body.access_token);
-  }
-
-  const [top, recent, profile, top_artists] = await Promise.all([
-    spotifyApi.getMyTopTracks({ limit: 10 }),
-    spotifyApi.getMyRecentlyPlayedTracks({ limit: 20 }),
-    spotifyApi.getMe(),
-    spotifyApi.getMyTopArtists({ limit: 10 }),
-  ]);
-  res.json({
-    profile : profile.body,
-    top     : top.body.items,
-    recent  : recent.body.items,
-    top_artists : top_artists.body.items,
-  });
 });
 
 export default router;

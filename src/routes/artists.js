@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import Artist from '../models/Artist.js';
-import spotify from '../spotifyClient.js';
+import { getSpotifyClient } from '../spotifyClient.js';
 
 const router = Router();
 

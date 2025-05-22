@@ -1,118 +1,92 @@
-import express from 'express';
-import SpotifyWebApi from 'spotify-web-api-node';
-import { v4 as uuid } from 'uuid';
-import User from '../models/User.js';
-import tokenStore from '../utils/tokenStore.js';
 
+import express       from 'express';
+import querystring   from 'querystring';
+import crypto        from 'crypto';
+import axios         from 'axios';
+import dotenv        from 'dotenv';
+
+dotenv.config();
 const router = express.Router();
 
-function getSpotifyClient() {
-  return new SpotifyWebApi({
-    clientId: process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+const {
+  SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET,
+  SPOTIFY_REDIRECT_URI,
+  FRONTEND_BASE_URL = 'http://localhost:5173',
+} = process.env;
+
+/* scopes needed for your app */
+const scope = [
+  'user-read-email',
+  'user-read-private',
+  'user-read-recently-played',
+  'user-top-read',
+].join(' ');
+
+// ───────────── STEP 1 – send user to Spotify ─────────────
+router.get('/auth', (_req, res) => {
+  const state = crypto.randomUUID();
+
+  const params = querystring.stringify({
+    response_type: 'code',
+    client_id:     SPOTIFY_CLIENT_ID,
+    scope,
+    redirect_uri:  SPOTIFY_REDIRECT_URI,
+    state,
   });
-}
 
-const SCOPES = [
-  "user-read-email",
-  "user-read-private",
-  "user-top-read",
-  "user-read-recently-played",
-];
-
-// 🔐 Spotify Login
-router.get('/spotify/login', (req, res) => {
-  const spotifyApi = getSpotifyClient();
-
-  const redirectUri = process.env.NODE_ENV === 'production'
-    ? 'https://project-music-and-memories-api.onrender.com/auth/spotify/callback'
-    : 'http://127.0.0.1:8080/auth/spotify/callback';
-
-  spotifyApi.setRedirectURI(redirectUri);
-
-  const state = uuid();
-  req.session.spotifyState = state;
-
-  const authorizeURL = spotifyApi.createAuthorizeURL(SCOPES, state);
-  res.redirect(authorizeURL);
+  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 });
 
-// 🎧 Spotify Callback
-router.get('/spotify/callback', async (req, res) => {
-  const { code, state } = req.query;
-  if (state !== req.session.spotifyState) {
-    return res.status(400).send('State mismatch');
-  }
-
-  const spotifyApi = getSpotifyClient();
-
-  const redirectUri = process.env.NODE_ENV === 'production'
-    ? 'https://project-music-and-memories-api.onrender.com/auth/spotify/callback'
-    : 'http://127.0.0.1:8080/auth/spotify/callback';
-
-  spotifyApi.setRedirectURI(redirectUri);
+// ───────────── STEP 2 – Spotify callback ─────────────
+router.get('/callback', async (req, res) => {
+  const { code } = req.query;
 
   try {
-    const { body } = await spotifyApi.authorizationCodeGrant(code);
-    const { access_token, refresh_token, expires_in } = body;
-
-    spotifyApi.setAccessToken(access_token);
-    const me = await spotifyApi.getMe();
-
-    const user = await User.findOneAndUpdate(
-      { spotifyId: me.body.id },
-      {
-        spotifyId: me.body.id,
-        username: me.body.display_name,
-        displayName: me.body.display_name,
-        photo: me.body.images?.[0]?.url ?? '',
-        email: me.body.email,
-        country: me.body.country,
-      },
-      { upsert: true, new: true }
+    const { data } = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      querystring.stringify({
+        grant_type:    'authorization_code',
+        code,
+        redirect_uri:  SPOTIFY_REDIRECT_URI,
+        client_id:     SPOTIFY_CLIENT_ID,
+        client_secret: SPOTIFY_CLIENT_SECRET,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     );
 
-    tokenStore.save(user._id.toString(), {
-      access_token,
-      refresh_token,
-      expires_at: Date.now() + expires_in * 1000,
-    });
+    // (Optional) persist the tokens in session / DB here
+    req.session.access_token  = data.access_token;
+    req.session.refresh_token = data.refresh_token;
 
-    req.session.userId = user._id;
-
-    const frontendRedirect = process.env.NODE_ENV === 'production'
-      ? 'https://project-music-and-memories.onrender.com'
-      : 'http://127.0.0.1:5173';
-
-    res.redirect(frontendRedirect);
-  } catch (e) {
-    console.error("Spotify callback error:", e.body || e.message || e);
-    res.status(500).send("Spotify authorization failed");
+    // ↩ back to the front‑end
+    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
+  } catch (err) {
+    console.error('Spotify token exchange failed', err.response?.data || err);
+    res.status(500).json({ error: 'Authentication failed' });
   }
 });
 
+// ───────────── Helper to refresh a token ─────────────
+router.get('/refresh', async (req, res) => {
+  try {
+    const { data } = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      querystring.stringify({
+        grant_type:    'refresh_token',
+        refresh_token: req.session.refresh_token,
+        client_id:     SPOTIFY_CLIENT_ID,
+        client_secret: SPOTIFY_CLIENT_SECRET,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    );
 
-// 🔍 Existing routes below this point
-
-// Search artists by name
-router.get('/artists/search', async (req, res) => {
-  const { q } = req.query;
-  const spotifyApi = getSpotifyClient();
-  const data = await spotifyApi.searchArtists(q);
-  res.json(data.body.artists.items);
-});
-
-// Get Spotify artist info by ID
-router.get('/artists/spotify/:id', async (req, res) => {
-  const spotifyApi = getSpotifyClient();
-  const data = await spotifyApi.getArtist(req.params.id);
-  res.json(data.body);
-});
-
-// Follow a custom artist (placeholder route)
-router.post('/artists/:id/follow', async (req, res) => {
-  const artistId = req.params.id;
-  res.json({ message: `Following artist ${artistId}` });
+    req.session.access_token = data.access_token;
+    res.json({ access_token: data.access_token });
+  } catch (err) {
+    console.error('Failed to refresh token', err.response?.data || err);
+    res.status(500).json({ error: 'Could not refresh token' });
+  }
 });
 
 export default router;

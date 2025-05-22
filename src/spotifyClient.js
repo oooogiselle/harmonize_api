@@ -1,18 +1,24 @@
-// src/spotifyClient.js
+
 import SpotifyWebApi from 'spotify-web-api-node';
 
-export function getSpotifyClient() {
-  if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
-    throw new Error('Spotify credentials missing from environment');
-  }
+let cachedToken     = null;
+let tokenExpiresAt  = 0;
 
+
+export async function getSpotifyClient() {
   const spotify = new SpotifyWebApi({
-    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientId:     process.env.SPOTIFY_CLIENT_ID,
     clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
   });
 
-  // ✅ TEMPORARY: Manually set your access token for testing (expires in 1 hour)
-  spotify.setAccessToken("BQCCooB60E10GYLj8doFLaxQTLB2kW2SK8OAS-hIJNHKkQBfwKenoTr-ZUcVAmarJW-i4gUTmy6WGfBWE2zLhWYIsGRu91G1D_pd2zj6LcFNrMxLhI4F1gR3GIJ1LiiGxoz1L2NEOx8");
+  const now = Date.now();
 
+  if (!cachedToken || now >= tokenExpiresAt) {
+    const { body } = await spotify.clientCredentialsGrant();
+    cachedToken    = body.access_token;
+    tokenExpiresAt = now + (body.expires_in * 1000) - 60_000; // renew 1 min early
+  }
+
+  spotify.setAccessToken(cachedToken);
   return spotify;
 }

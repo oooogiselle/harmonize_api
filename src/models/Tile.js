@@ -3,8 +3,8 @@ import mongoose from 'mongoose';
 
 const tileSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, required: true },          // e.g., 'text', 'artist', etc.
-  content: { type: mongoose.Schema.Types.Mixed },  // Flexible data per type
+  type: { type: String, required: true },        
+  content: { type: mongoose.Schema.Types.Mixed },
   x: Number,
   y: Number,
   w: Number,
