@@ -1,138 +1,118 @@
 import express from 'express';
-import { getSpotifyClient } from '../spotifyClient.js';
-import Artist from '../models/Artist.js';
+import SpotifyWebApi from 'spotify-web-api-node';
+import { v4 as uuid } from 'uuid';
+import User from '../models/User.js';
+import tokenStore from '../utils/tokenStore.js';
 
 const router = express.Router();
 
-async function ensureToken(req, res, next) {
-  try {
-    const spotify = getSpotifyClient();
-
-    const { body } = await spotify.clientCredentialsGrant();
-    spotify.setAccessToken(body.access_token);
-    req.spotify = spotify;
-
-    next();
-  } catch (e) {
-    console.error('Spotify auth failed:', e);
-    res.status(500).json({ error: 'Spotify auth failed' });
-  }
+function getSpotifyClient() {
+  return new SpotifyWebApi({
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
 }
 
-/* ── SEARCH ────────────────────────────────────────────────────────── */
-router.get('/artists/search', ensureToken, async (req, res) => {
-  const q = req.query.query;
-  if (!q) return res.status(400).json({ error: 'query required' });
+const SCOPES = [
+  "user-read-email",
+  "user-read-private",
+  "user-top-read",
+  "user-read-recently-played",
+];
 
-  try {
-    const { body } = await req.spotify.searchArtists(q, { limit: 10, market: 'US' });
-    const out = body.artists.items.map(a => ({
-      id:    a.id,
-      name:  a.name,
-      image: a.images[0]?.url ?? null,
-    }));
-    res.json(out);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Spotify search failed' });
-  }
+// 🔐 Spotify Login
+router.get('/spotify/login', (req, res) => {
+  const spotifyApi = getSpotifyClient();
+
+  const redirectUri = process.env.NODE_ENV === 'production'
+    ? 'https://project-music-and-memories-api.onrender.com/auth/spotify/callback'
+    : 'http://127.0.0.1:8080/auth/spotify/callback';
+
+  spotifyApi.setRedirectURI(redirectUri);
+
+  const state = uuid();
+  req.session.spotifyState = state;
+
+  const authorizeURL = spotifyApi.createAuthorizeURL(SCOPES, state);
+  res.redirect(authorizeURL);
 });
 
-router.get('/artists/spotify/:id', ensureToken, async (req, res) => {
-  const { id }    = req.params;
-  const spotify   = req.spotify;
+// 🎧 Spotify Callback
+router.get('/spotify/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (state !== req.session.spotifyState) {
+    return res.status(400).send('State mismatch');
+  }
+
+  const spotifyApi = getSpotifyClient();
+
+  const redirectUri = process.env.NODE_ENV === 'production'
+    ? 'https://project-music-and-memories-api.onrender.com/auth/spotify/callback'
+    : 'http://127.0.0.1:8080/auth/spotify/callback';
+
+  spotifyApi.setRedirectURI(redirectUri);
 
   try {
-    const { body: art } = await spotify.getArtist(id);
-    const { body: { tracks } } = await spotify.getArtistTopTracks(id, 'US');
+    const { body } = await spotifyApi.authorizationCodeGrant(code);
+    const { access_token, refresh_token, expires_in } = body;
 
-    const topTracks = tracks.map(t => ({
-      id: t.id,
-      name: t.name,
-      popularity: t.popularity,
-      album: {
-        name: t.album.name,
-        images: t.album.images,
-      }
-    }));
+    spotifyApi.setAccessToken(access_token);
+    const me = await spotifyApi.getMe();
 
+    const user = await User.findOneAndUpdate(
+      { spotifyId: me.body.id },
+      {
+        spotifyId: me.body.id,
+        username: me.body.display_name,
+        displayName: me.body.display_name,
+        photo: me.body.images?.[0]?.url ?? '',
+        email: me.body.email,
+        country: me.body.country,
+      },
+      { upsert: true, new: true }
+    );
 
-    let albums = [];
-    let offset = 0;
-    let page;
-    do {
-      page = await spotify.getArtistAlbums(id, {
-        include_groups: 'album,single',
-        limit: 50,
-        market: 'US',
-        offset,
-      });
-      albums = albums.concat(page.body.items);
-      offset += 50;
-    } while (page.body.next);
+    tokenStore.save(user._id.toString(), {
+      access_token,
+      refresh_token,
+      expires_at: Date.now() + expires_in * 1000,
+    });
 
-    /* dedupe by lowercase name */
-    const seen  = new Set();
-    const clean = albums
-      .filter(a => {
-        const key = a.name.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map(a => ({
-        id: a.id,
-        name: a.name,
-        year: a.release_date.split('-')[0],
-        images: a.images,
-      }));
+    req.session.userId = user._id;
 
-      const existing = await Artist.findOne({ spotifyId: id });
-      
-          const payload = {
-            spotifyId:  id,
-            artistName: art.name,
-            profilePic: art.images[0]?.url ?? null,
-            topTracks,
-            albums:     clean,
-            bio:        existing?.bio       ?? '',       
-            followers:  existing?.followers ?? [],         
-          };
-      
-          await Artist.findOneAndUpdate(
-            { spotifyId: id },
-            payload,
-            { upsert: true, new: true }
-          );
+    const frontendRedirect = process.env.NODE_ENV === 'production'
+      ? 'https://project-music-and-memories.onrender.com'
+      : 'http://127.0.0.1:5173';
 
-    res.json(payload);
+    res.redirect(frontendRedirect);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Spotify artist fetch failed' });
+    console.error("Spotify callback error:", e.body || e.message || e);
+    res.status(500).send("Spotify authorization failed");
   }
 });
 
 
-router.patch('/artists/:id/follow', async (req, res) => {
-  const { id }   = req.params;          
-  const userId   = req.get('x-user-id') || '682bf5ec57acfd1e97d85d8e';
+// 🔍 Existing routes below this point
 
-  try {
-    const artist = await Artist.findOne({ spotifyId: id });
-    if (!artist) return res.status(404).json({ error: 'Artist not found' });
+// Search artists by name
+router.get('/artists/search', async (req, res) => {
+  const { q } = req.query;
+  const spotifyApi = getSpotifyClient();
+  const data = await spotifyApi.searchArtists(q);
+  res.json(data.body.artists.items);
+});
 
-    const idx = artist.followers.indexOf(userId);
-    if (idx === -1) {
-      artist.followers.push(userId);              
-    } else {
-      artist.followers.splice(idx, 1);              
-    }
-    await artist.save();
-    res.json({ followers: artist.followers });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Follow update failed' });
-  }
+// Get Spotify artist info by ID
+router.get('/artists/spotify/:id', async (req, res) => {
+  const spotifyApi = getSpotifyClient();
+  const data = await spotifyApi.getArtist(req.params.id);
+  res.json(data.body);
+});
+
+// Follow a custom artist (placeholder route)
+router.post('/artists/:id/follow', async (req, res) => {
+  const artistId = req.params.id;
+  res.json({ message: `Following artist ${artistId}` });
 });
 
 export default router;
