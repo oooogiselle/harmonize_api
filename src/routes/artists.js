@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import Artist from '../models/Artist.js';
 import { getSpotifyClient } from '../spotifyClient.js';
 import SpotifyWebApi from 'spotify-web-api-node';
@@ -117,6 +118,11 @@ router.patch('/artists/:id/bio', async (req, res) => {
 
 /* ❗ This must be LAST to avoid catching Spotify IDs */
 router.get('/:id', async (req, res) => {
+  // 🔒 Prevent CastError by skipping non-ObjectId values
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(404).json({ msg: 'Artist not found' });
+  }
+
   try {
     const artist = await Artist.findById(req.params.id);
     if (!artist) return res.status(404).json({ msg: 'Artist not found' });
@@ -131,15 +137,10 @@ router.get('/:id', async (req, res) => {
           const searchResult = await spotify.searchArtists(artist.artistName, { limit: 1 });
           if (searchResult.body.artists.items.length > 0) {
             const topResult = searchResult.body.artists.items[0];
-            
             artist.spotifyId = topResult.id;
-            console.log(`Found spotifyId: ${topResult.id} for artist: ${artist.artistName}`);
-            
             if (topResult.images && topResult.images.length > 0) {
               artist.profilePic = topResult.images[0].url;
-              console.log(`Updated profile pic to: ${artist.profilePic}`);
             }
-            
             await artist.save();
           }
         }
@@ -150,8 +151,6 @@ router.get('/:id', async (req, res) => {
 
     if (artist.spotifyId) {
       try {
-        console.log(`Fetching Spotify data for ${artist.artistName} with ID: ${artist.spotifyId}`);
-        
         const [spArtist, spAlbums, spTop] = await Promise.all([
           spotify.getArtist(artist.spotifyId),
           spotify.getArtistAlbums(artist.spotifyId, { limit: 20 }),
@@ -180,12 +179,7 @@ router.get('/:id', async (req, res) => {
         await artist.save();
       } catch (spotifyErr) {
         console.error('[Spotify Error]', spotifyErr.message);
-        if (spotifyErr.statusCode) {
-          console.error(`Spotify API returned status code: ${spotifyErr.statusCode}`);
-        }
       }
-    } else {
-      console.log(`No Spotify ID found for artist: ${artist.artistName}. Add a spotifyId to enable Spotify integration.`);
     }
 
     res.json(artist);
