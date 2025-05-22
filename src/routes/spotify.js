@@ -46,16 +46,17 @@ router.get('/search', async (req, res) => {
 
   try {
     const api = await getAppSpotify();
-    const { body } = await api.searchArtists(q, { limit: 1 });
-    if (!body.artists.items.length)
-      return res.status(404).json({ error: 'No artist found' });
+    const { body } = await api.searchArtists(q, { limit: 10 });
 
-    const a = body.artists.items[0];
-    res.json({
-      id:    a.id,
-      name:  a.name,
+    const results = body.artists.items.map(a => ({
+      id: a.id,
+      name: a.name,
       image: a.images?.[0]?.url ?? null,
-    });
+      genres: a.genres ?? [],
+      popularity: a.popularity,
+    }));
+
+    res.json(results);
   } catch (err) {
     console.error('Spotify search error', err.body || err.message);
     res.status(500).json({ error: 'Search failed' });
