@@ -29,4 +29,37 @@ router.get('/refresh', async (req, res) => {
   }
 });
 
+async function getAppSpotify() {
+  const api = new SpotifyWebApi({
+    clientId:     process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
+  const { body } = await api.clientCredentialsGrant();
+  api.setAccessToken(body.access_token);
+  return api;
+}
+
+/* ------------- NEW: /spotify/search?q=artist name ------------- */
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'Missing q param' });
+
+  try {
+    const api = await getAppSpotify();
+    const { body } = await api.searchArtists(q, { limit: 1 });
+    if (!body.artists.items.length)
+      return res.status(404).json({ error: 'No artist found' });
+
+    const a = body.artists.items[0];
+    res.json({
+      id:    a.id,
+      name:  a.name,
+      image: a.images?.[0]?.url ?? null,
+    });
+  } catch (err) {
+    console.error('Spotify search error', err.body || err.message);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 export default router;
