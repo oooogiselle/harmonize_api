@@ -1,4 +1,3 @@
-
 import dotenv   from 'dotenv';
 import express  from 'express';
 import mongoose from 'mongoose';
@@ -9,6 +8,7 @@ import authRoutes    from './routes/auth.js';
 import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
 import eventRoutes   from './routes/events.js';
+import meRoutes      from './routes/me.js';
 
 dotenv.config();
 
@@ -21,36 +21,38 @@ const {
 
 const app = express();
 
-// ────────────────  middleware  ────────────────
+// ────────────────  Session Middleware  ────────────────
 app.use(
   session({
     name:    'session',
     secret:  SESSION_SECRET,
-    maxAge:  24 * 60 * 60 * 1000,   // 24 h
+    maxAge:  24 * 60 * 60 * 1000,   // 24 hours
     sameSite:'lax',
   }),
 );
 
+// ────────────────  CORS Config  ────────────────
 app.use(
   cors({
     origin: [
-      'http://127.0.0.1:5173',   // local dev
-      FRONTEND_BASE_URL,         // deployed FE
+      'http://127.0.0.1:5173',                    // local dev
+      FRONTEND_BASE_URL,                          // deployed frontend
     ],
     credentials: true,
   }),
 );
 
+// ────────────────  JSON Parser  ────────────────
 app.use(express.json());
 
-// ────────────────  routes  ────────────────
-app.use('/',         authRoutes);
-app.use('/spotify',  spotifyRoutes);
+// ────────────────  Routes  ────────────────
+app.use('/',         authRoutes);       // /login and /spotify/callback
+app.use('/spotify',  spotifyRoutes);    // /auth, /callback, /refresh
 app.use('/artists',  artistRoutes);
 app.use('/events',   eventRoutes);
-// …etc.
+app.use(meRoutes);                     // ✅ Mount /api/me/spotify route
 
-// ────────────────  DB + start  ────────────────
+// ────────────────  Database + Start  ────────────────
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✓ MongoDB connected'))
   .catch((err) => {
