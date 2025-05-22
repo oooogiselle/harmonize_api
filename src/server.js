@@ -21,15 +21,18 @@ const FRONTEND = 'https://project-music-and-memories-umzm.onrender.com';
 
 const app = express();
 
-/* ───────── session – must send cookie cross‑site ───────── */
+/* tell Express to trust X‑Forwarded‑Proto so req.secure is true */
+app.set('trust proxy', 1);
+
+/* ── session cookie ── */
 app.use(
   session({
-    name:     'session',
-    secret:   SESSION_SECRET,
-    maxAge:   24 * 60 * 60 * 1000,
-    sameSite: 'none',   // allow cross‑site
-    secure:   true,     // required with 'none'
-  }),
+    name: 'session',
+    secret: process.env.SESSION_SECRET,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'none',   // cross‑site
+    secure: true        // cookie marked “Secure”
+  })
 );
 
 /* ───────── CORS ───────── */
