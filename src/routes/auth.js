@@ -40,16 +40,19 @@ router.get("/spotify/callback", async (req, res, next) => {
   if (state !== req.session.spotifyState) return res.status(400).send("State mismatch");
 
   const spotifyApi = buildSpotify();
+
   try {
     const { body } = await spotifyApi.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = body;
 
     spotifyApi.setAccessToken(access_token);
-    const me = await spotifyApi.getMe();   
+    const me = await spotifyApi.getMe();
+
     const user = await User.findOneAndUpdate(
       { spotifyId: me.body.id },
       {
         spotifyId:   me.body.id,
+        username:    me.body.display_name,
         displayName: me.body.display_name,
         photo:       me.body.images?.[0]?.url ?? "",
         email:       me.body.email,
@@ -67,9 +70,12 @@ router.get("/spotify/callback", async (req, res, next) => {
     req.session.userId = user._id;
     res.redirect('http://127.0.0.1:5173/');
   } catch (e) {
-    next(e);
+    console.error("Spotify callback error:", e.body || e.message || e);
+    res.status(500).send("Spotify authorization failed");
   }
 });
+
+
 
 router.get("/me/spotify", async (req, res) => {
   const uid = req.session.userId;
@@ -91,16 +97,17 @@ router.get("/me/spotify", async (req, res) => {
     spotifyApi.setAccessToken(body.access_token);
   }
 
-  const [top, recent, profile] = await Promise.all([
+  const [top, recent, profile, top_artists] = await Promise.all([
     spotifyApi.getMyTopTracks({ limit: 10 }),
     spotifyApi.getMyRecentlyPlayedTracks({ limit: 20 }),
     spotifyApi.getMe(),
+    spotifyApi.getMyTopArtists({ limit: 10 }),
   ]);
-
   res.json({
     profile : profile.body,
     top     : top.body.items,
     recent  : recent.body.items,
+    top_artists : top_artists.body.items,
   });
 });
 

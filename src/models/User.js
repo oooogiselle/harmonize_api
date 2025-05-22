@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   spotifyId:   { type: String, required: true, unique: true },
+  username:    String,
   displayName: String,
   photo:       String,
   email:       String,
