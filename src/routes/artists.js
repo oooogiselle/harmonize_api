@@ -120,8 +120,8 @@ router.patch('/artists/:id/bio', async (req, res) => {
 router.get('/:id', async (req, res) => {
   // 🔒 Prevent CastError by skipping non-ObjectId values
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-    return res.status(404).json({ msg: 'Artist not found' });
-  }
+        return res.status(404).json({ msg: 'Artist not found' });
+      }
 
   try {
     const artist = await Artist.findById(req.params.id);
