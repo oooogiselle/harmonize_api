@@ -1,91 +1,31 @@
+import express from 'express';
+import SpotifyWebApi from 'spotify-web-api-node';
+import tokenStore from '../utils/tokenStore.js';
 
-import express       from 'express';
-import querystring   from 'querystring';
-import crypto        from 'crypto';
-import axios         from 'axios';
-import dotenv        from 'dotenv';
-
-dotenv.config();
 const router = express.Router();
 
-const {
-  SPOTIFY_CLIENT_ID,
-  SPOTIFY_CLIENT_SECRET,
-  SPOTIFY_REDIRECT_URI,
-  FRONTEND_BASE_URL = 'http://localhost:5173',
-} = process.env;
+router.get('/refresh', async (req, res) => {
+  const userId = req.session.userId;
+  if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
-/* scopes needed for your app */
-const scope = [
-  'user-read-email',
-  'user-read-private',
-  'user-read-recently-played',
-  'user-top-read',
-].join(' ');
+  const tokens = tokenStore.get(userId);
+  if (!tokens) return res.status(403).json({ error: 'No token' });
 
-// ───────────── STEP 1 – send user to Spotify ─────────────
-router.get('/auth', (_req, res) => {
-  const state = crypto.randomUUID();
-
-  const params = querystring.stringify({
-    response_type: 'code',
-    client_id:     SPOTIFY_CLIENT_ID,
-    scope,
-    redirect_uri:  SPOTIFY_REDIRECT_URI,
-    state,
+  const api = new SpotifyWebApi({
+    clientId:     process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
   });
 
-  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
-});
-
-// ───────────── STEP 2 – Spotify callback ─────────────
-router.get('/callback', async (req, res) => {
-  const { code } = req.query;
-
+  api.setRefreshToken(tokens.refresh_token);
   try {
-    const { data } = await axios.post(
-      'https://accounts.spotify.com/api/token',
-      querystring.stringify({
-        grant_type:    'authorization_code',
-        code,
-        redirect_uri:  SPOTIFY_REDIRECT_URI,
-        client_id:     SPOTIFY_CLIENT_ID,
-        client_secret: SPOTIFY_CLIENT_SECRET,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    );
-
-    // (Optional) persist the tokens in session / DB here
-    req.session.access_token  = data.access_token;
-    req.session.refresh_token = data.refresh_token;
-
-    // ↩ back to the front‑end
-    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
+    const { body } = await api.refreshAccessToken();
+    tokens.access_token  = body.access_token;
+    tokens.expires_at    = Date.now() + body.expires_in * 1000;
+    tokenStore.save(userId, tokens);
+    res.json({ access_token: body.access_token });
   } catch (err) {
-    console.error('Spotify token exchange failed', err.response?.data || err);
-    res.status(500).json({ error: 'Authentication failed' });
-  }
-});
-
-// ───────────── Helper to refresh a token ─────────────
-router.get('/refresh', async (req, res) => {
-  try {
-    const { data } = await axios.post(
-      'https://accounts.spotify.com/api/token',
-      querystring.stringify({
-        grant_type:    'refresh_token',
-        refresh_token: req.session.refresh_token,
-        client_id:     SPOTIFY_CLIENT_ID,
-        client_secret: SPOTIFY_CLIENT_SECRET,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    );
-
-    req.session.access_token = data.access_token;
-    res.json({ access_token: data.access_token });
-  } catch (err) {
-    console.error('Failed to refresh token', err.response?.data || err);
-    res.status(500).json({ error: 'Could not refresh token' });
+    console.error(err);
+    res.status(500).json({ error: 'refresh failed' });
   }
 });
 
