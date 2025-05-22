@@ -68,7 +68,11 @@ router.get("/spotify/callback", async (req, res, next) => {
     });
 
     req.session.userId = user._id;
-    res.redirect('http://127.0.0.1:5173/');
+    const redirectFrontend = process.env.NODE_ENV === 'production'
+    ? 'https://project-music-and-memories.onrender.com'
+    : 'http://127.0.0.1:5173/';
+
+    res.redirect(redirectFrontend);
   } catch (e) {
     console.error("Spotify callback error:", e.body || e.message || e);
     res.status(500).send("Spotify authorization failed");
