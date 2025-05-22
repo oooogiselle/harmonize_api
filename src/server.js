@@ -26,22 +26,24 @@ app.use(
   session({
     name: 'session',
     secret: SESSION_SECRET,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'none',            // Required for cross-site cookies
-    secure: true,                // Required when using sameSite: 'none'
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'none',    // ✅ allow cross-site
+    secure: true,        // ✅ required when using 'none'
   })
 );
+
 
 // ────────────────  CORS config  ────────────────
 app.use(
   cors({
     origin: [
-      'http://127.0.0.1:5173',   // local dev
-      FRONTEND_BASE_URL,         // deployed frontend
+      'http://127.0.0.1:5173',
+      process.env.FRONTEND_BASE_URL,
     ],
-    credentials: true,           // allow cookies to be sent
+    credentials: true,
   })
 );
+
 
 app.use(express.json());
 
