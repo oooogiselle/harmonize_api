@@ -1,8 +1,20 @@
 import { Router } from 'express';
 import Artist from '../models/Artist.js';
 import { getSpotifyClient } from '../spotifyClient.js';
+import SpotifyWebApi from 'spotify-web-api-node';
 
 const router = Router();
+
+/* Utility: app-level Spotify client (no login needed) */
+async function getAppSpotify() {
+  const api = new SpotifyWebApi({
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
+  const { body } = await api.clientCredentialsGrant();
+  api.setAccessToken(body.access_token);
+  return api;
+}
 
 router.post('/', async (req, res) => {
   const artist = await Artist.create(req.body);
@@ -23,10 +35,13 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+/* 🔥 Existing MongoDB artist route */
 router.get('/:id', async (req, res) => {
   try {
     const artist = await Artist.findById(req.params.id);
     if (!artist) return res.status(404).json({ msg: 'Artist not found' });
+
+    const spotify = await getSpotifyClient();
 
     console.log(`Artist ${artist.artistName} has spotifyId: ${artist.spotifyId || 'none'}`);
 
@@ -63,12 +78,6 @@ router.get('/:id', async (req, res) => {
           spotify.getArtistTopTracks(artist.spotifyId, 'US')
         ]);
 
-        console.log(`Spotify artist response image count: ${spArtist.body.images?.length || 0}`);
-        if (spArtist.body.images?.[0]) {
-          console.log(`First image URL: ${spArtist.body.images[0].url}`);
-        }
-
-       
         if (spArtist.body.images && spArtist.body.images.length > 0) {
           artist.profilePic = spArtist.body.images[0].url;
         }
@@ -106,8 +115,43 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/* ✅ New route for /artists/spotify/:id */
+router.get('/spotify/:id', async (req, res) => {
+  try {
+    const spotify = await getAppSpotify();
+    const [artist, albums, topTracks] = await Promise.all([
+      spotify.getArtist(req.params.id),
+      spotify.getArtistAlbums(req.params.id, { limit: 20 }),
+      spotify.getArtistTopTracks(req.params.id, 'US'),
+    ]);
+
+    res.json({
+      id: artist.body.id,
+      name: artist.body.name,
+      genres: artist.body.genres,
+      followers: artist.body.followers?.total,
+      profilePic: artist.body.images?.[0]?.url || null,
+      albums: albums.body.items.map(a => ({
+        id: a.id,
+        name: a.name,
+        cover: a.images?.[0]?.url || null,
+        year: a.release_date?.slice(0, 4),
+      })),
+      topTracks: topTracks.body.tracks.map(t => ({
+        id: t.id,
+        name: t.name,
+        album: { images: t.album.images },
+        popularity: t.popularity,
+      }))
+    });
+  } catch (err) {
+    console.error('[Spotify Direct Fetch Error]', err.message || err);
+    res.status(500).json({ error: 'Spotify artist fetch failed' });
+  }
+});
+
 router.patch('/:id/follow', async (req, res) => {
-  const me = '682bf5ec57acfd1e97d85d8e';
+  const me = '682bf5ec57acfd1e97d85e';
   const artist = await Artist.findById(req.params.id);
   if (!artist) return res.status(404).json({ msg: 'Artist not found' });
 
@@ -124,6 +168,7 @@ router.patch('/:id/follow', async (req, res) => {
 router.get('/test/spotify/:id', async (req, res) => {
   try {
     const id = req.params.id;
+    const spotify = await getAppSpotify();
     const result = await spotify.getArtist(id);
     res.json(result.body);
   } catch (err) {
@@ -149,6 +194,5 @@ router.patch('/artists/:id/bio', async (req, res) => {
     res.status(500).json({ error: 'Bio update failed' });
   }
 });
-
 
 export default router;
