@@ -36,6 +36,28 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+/* ✅ NEW MULTI-RESULT SEARCH ENDPOINT */
+router.get('/spotify/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: 'Missing query parameter' });
+
+  try {
+    const spotify = await getAppSpotify();
+    const result = await spotify.searchArtists(query, { limit: 10 });
+
+    const artists = result.body.artists.items.map(a => ({
+      id: a.id,
+      name: a.name,
+      image: a.images?.[0]?.url || null,
+    }));
+
+    res.json(artists);
+  } catch (err) {
+    console.error('[Spotify Search Error]', err.message || err);
+    res.status(500).json({ error: 'Spotify search failed' });
+  }
+});
+
 /* ✅ Specific route FIRST: /artists/spotify/:id */
 router.get('/spotify/:id', async (req, res) => {
   try {
@@ -120,16 +142,14 @@ router.patch('/artists/:id/bio', async (req, res) => {
 router.get('/:id', async (req, res) => {
   // 🔒 Prevent CastError by skipping non-ObjectId values
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-        return res.status(404).json({ msg: 'Artist not found' });
-      }
+    return res.status(404).json({ msg: 'Artist not found' });
+  }
 
   try {
     const artist = await Artist.findById(req.params.id);
     if (!artist) return res.status(404).json({ msg: 'Artist not found' });
 
     const spotify = await getSpotifyClient();
-
-    console.log(`Artist ${artist.artistName} has spotifyId: ${artist.spotifyId || 'none'}`);
 
     if (!artist.profilePic || artist.profilePic === "https://link.to/image.jpg") {
       try {
