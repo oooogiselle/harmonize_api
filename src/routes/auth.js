@@ -1,9 +1,11 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
+import axios    from 'axios';
+import qs       from 'querystring';
+import User     from '../models/User.js';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
 import tokenStore from '../utils/tokenStore.js';
-import User from '../models/User.js';
-import bcrypt from 'bcryptjs';
 
 
 const router = express.Router();
@@ -103,7 +105,6 @@ router.get('/api/me/spotify', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { name, username, password, accountType = 'user' } = req.body;
-
     if (!name || !username || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
@@ -111,14 +112,12 @@ router.post('/register', async (req, res) => {
     if (exists)
       return res.status(409).json({ message: 'Username already taken' });
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
+    const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
       displayName: name,
       username,
-      password: passwordHash,
+      password: hash,
       accountType,
-      // No spotifyId, email, etc. if not needed
     });
 
     res.status(201).json({ message: 'User registered', userId: user._id });
