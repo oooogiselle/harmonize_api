@@ -104,24 +104,31 @@ router.post('/register', async (req, res) => {
     if (!name || !username || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
-    const exists = await User.exists({ username });
-    if (exists)
-      return res.status(409).json({ message: 'Username already taken' });
+    // ── pre‑flight uniqueness check ──
+    const taken = await User.exists({ $or: [ { username }, { email } ] });
+    if (taken)
+      return res.status(409).json({ message: 'Username or e‑mail already taken' });
 
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
-      displayName: name,
-      username,
-      email,
-      password: hash,
+      displayName : name,
+      username    : username.toLowerCase(),  // normalise if you like
+      email       : email?.toLowerCase(),
+      password    : hash,
       accountType,
     });
 
-    res.status(201).json({ message: 'User registered', userId: user._id });
+    return res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    console.error('💥 Error in /register:', err);
+    // ── graceful handling of race‑condition duplicates ──
+    if (err.code === 11000) {
+      const dupField = Object.keys(err.keyPattern)[0];   // 'username' or 'email'
+      return res.status(409).json({ message: `${dupField} already in use` });
+    }
+    console.error('💥 /register failed:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 
 export default router;
