@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import axios    from 'axios';
 import qs       from 'querystring';
 import User     from '../models/User.js';
@@ -100,7 +101,6 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-// routes/auth.js
 
 router.post('/register', async (req, res) => {
   try {
@@ -125,14 +125,24 @@ router.post('/register', async (req, res) => {
 });
 
 router.get('/spotify/login', (req, res) => {
-  const querystring = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.SPOTIFY_CLIENT_ID,
-    scope: 'user-read-private user-read-email user-top-read user-read-recently-played',
-    redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+  const state = crypto.randomBytes(16).toString('hex');  
+  req.session.state = state;                           
+
+  const scope = [
+    'user-read-email',
+    'user-top-read',
+  ].join(' ');
+
+  const query = qs.stringify({
+    response_type : 'code',
+    client_id     : process.env.SPOTIFY_CLIENT_ID,
+    redirect_uri  : process.env.SPOTIFY_REDIRECT_URI,
+    scope,
+    state,   
+    show_dialog    : true,
   });
 
-  res.redirect(`https://accounts.spotify.com/authorize?${querystring.toString()}`);
+  res.redirect(`https://accounts.spotify.com/authorize?${query}`);
 });
 
 
