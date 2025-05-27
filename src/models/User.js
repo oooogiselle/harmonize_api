@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
-  spotifyId:   { type: String, required: true, unique: true },
+  spotifyId: { type: String, required: false },
+
   username:    String,
   displayName: String,
   photo:       String,
