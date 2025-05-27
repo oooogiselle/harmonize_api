@@ -129,6 +129,17 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+router.get('/spotify/login', (req, res) => {
+  const querystring = new URLSearchParams({
+    response_type: 'code',
+    client_id: process.env.SPOTIFY_CLIENT_ID,
+    scope: 'user-read-private user-read-email user-top-read user-read-recently-played',
+    redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+  });
+
+  res.redirect(`https://accounts.spotify.com/authorize?${querystring.toString()}`);
+});
+
 
 
 export default router;
