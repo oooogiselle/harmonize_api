@@ -103,32 +103,31 @@ router.get('/api/me/spotify', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { name, username, password, accountType = 'user' } = req.body;
-    if (!name || !username || !password) {
-      console.error('Missing fields:', req.body);
+
+    if (!name || !username || !password)
       return res.status(400).json({ message: 'Missing fields' });
-    }
 
     const exists = await User.exists({ username });
-    if (exists) {
-      console.warn('Username already taken:', username);
+    if (exists)
       return res.status(409).json({ message: 'Username already taken' });
-    }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      name,
+      displayName: name,
       username,
       password: passwordHash,
       accountType,
+      // No spotifyId, email, etc. if not needed
     });
 
     res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    console.error('Error in /register:', err); // 🛑 LOG THIS
+    console.error('💥 Error in /register:', err); // LOG THIS
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 router.get('/spotify/login', (req, res) => {
   const querystring = new URLSearchParams({
     response_type: 'code',
