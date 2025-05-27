@@ -1,150 +1,61 @@
-import express from 'express';
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import axios    from 'axios';
-import qs       from 'querystring';
-import User     from '../models/User.js';
-import SpotifyWebApi from 'spotify-web-api-node';
-import { v4 as uuid } from 'uuid';
-import tokenStore from '../utils/tokenStore.js';
-
+import crypto      from 'crypto';
+import qs          from 'querystring';
+import axios       from 'axios';
+import express     from 'express';
 
 const router = express.Router();
 
-const {
-  SPOTIFY_CLIENT_ID,
-  SPOTIFY_CLIENT_SECRET,
-  SPOTIFY_REDIRECT_URI,
-  FRONTEND_BASE_URL,
-} = process.env;
-
-/* helper to build a Spotify API client */
-function buildSpotify() {
-  return new SpotifyWebApi({
-    clientId:     SPOTIFY_CLIENT_ID,
-    clientSecret: SPOTIFY_CLIENT_SECRET,
-    redirectUri:  SPOTIFY_REDIRECT_URI,
-  });
-}
-
-/* ───────── STEP 1  /login ───────── */
-router.get('/login', (req, res) => {
-  const spotify   = buildSpotify();
-  const state     = uuid();
-  req.session.spotifyState = state;           // <‑‑ save in cookie
-
-  const url = spotify.createAuthorizeURL(
-    [
-      'user-read-email',
-      'user-read-private',
-      'user-read-recently-played',
-      'user-top-read',
-    ],
-    state,
-  );
-  res.redirect(url);
-});
-
-/* ───────── STEP 2  /spotify/callback ───────── */
-router.get('/spotify/callback', async (req, res) => {
-  const { code, state } = req.query;
-  if (state !== req.session.spotifyState)
-    return res.status(400).send('State mismatch');
-
-  const spotify = buildSpotify();
-
-  try {
-    const { body } = await spotify.authorizationCodeGrant(code);
-    const { access_token, refresh_token, expires_in } = body;
-
-    spotify.setAccessToken(access_token);
-
-    const { body: me } = await spotify.getMe();
-
-    // save tokens in memory (for demo) keyed by spotify id
-    tokenStore.save(me.id, {
-      access_token,
-      refresh_token,
-      expires_at: Date.now() + expires_in * 1000,
-    });
-
-    req.session.userId = me.id;      // <-- save who is logged‑in
-    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
-  } catch (err) {
-    console.error('callback error', err.body || err.message);
-    res.status(500).send('OAuth failed');
-  }
-});
-
-/* ───────── Dashboard data  /api/me/spotify ───────── */
-router.get('/api/me/spotify', async (req, res) => {
-  const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ error: 'Not logged in' });
-
-  const tokens = tokenStore.get(userId);
-  if (!tokens)  return res.status(403).json({ error: 'No token' });
-
-  const spotify = buildSpotify();
-  spotify.setAccessToken(tokens.access_token);
-  spotify.setRefreshToken(tokens.refresh_token);
-
-  try {
-    const [ profile, top ] = await Promise.all([
-      spotify.getMe(),
-      spotify.getMyTopTracks({ limit: 10 }),
-    ]);
-
-    res.json({ profile: profile.body, top: top.body.items });
-  } catch (err) {
-    console.error(err.body || err.message);
-    res.status(500).json({ error: 'Spotify API failed' });
-  }
-});
-
-
-router.post('/register', async (req, res) => {
-  try {
-    const { name, username, email, password, accountType = 'user' } = req.body;
-    if (!name || !username || !password)
-      return res.status(400).json({ message: 'Missing fields' });
-
-    const exists = await User.exists({ username });
-    if (exists)
-      return res.status(409).json({ message: 'Username already taken' });
-
-    const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({
-          displayName: name, username, email, password: hash, accountType,
-        });
-
-    res.status(201).json({ message: 'User registered', userId: user._id });
-  } catch (err) {
-    console.error('💥 Error in /register:', err); // LOG THIS
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
+// ── 1.  LOGIN:  redirect user to Spotify ───────────────
 router.get('/spotify/login', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');  
-  req.session.state = state;                           
+  const state = crypto.randomBytes(16).toString('hex');  // (a) generate once
+  req.session.oauthState = state;                        // (b) remember
 
   const scope = [
     'user-read-email',
     'user-top-read',
   ].join(' ');
 
-  const query = qs.stringify({
+  const params = qs.stringify({
     response_type : 'code',
     client_id     : process.env.SPOTIFY_CLIENT_ID,
     redirect_uri  : process.env.SPOTIFY_REDIRECT_URI,
     scope,
-    state,   
+    state,                                             // (c) **same value**
     show_dialog    : true,
   });
 
-  res.redirect(`https://accounts.spotify.com/authorize?${query}`);
+  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 });
 
+// ── 2.  CALLBACK:  verify state, exchange code ────────
+router.get('/spotify/callback', async (req, res) => {
+  const { code, state } = req.query;
 
+  if (!state || state !== req.session.oauthState) {
+    return res.status(400).send('State mismatch');
+  }
+  delete req.session.oauthState;                        // (d) one‑time use
+
+  try {
+    const token = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      qs.stringify({
+        grant_type   : 'authorization_code',
+        code,
+        redirect_uri : process.env.SPOTIFY_REDIRECT_URI,
+        client_id    : process.env.SPOTIFY_CLIENT_ID,
+        client_secret: process.env.SPOTIFY_CLIENT_SECRET,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    // Success – store tokens on the user or in session, then redirect
+    req.session.spotify = token.data;                   // access_token, etc.
+    res.redirect(process.env.FRONTEND_URL + '/dashboard');
+  } catch (err) {
+    console.error('Spotify token exchange failed:', err.response?.data || err);
+    res.status(500).send('Spotify auth failed');
+  }
+});
 
 export default router;
