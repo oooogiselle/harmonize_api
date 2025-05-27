@@ -26,13 +26,17 @@ function buildSpotify() {
 
 /* ───────── STEP 1  /auth/spotify/login ───────── */
 router.get('/spotify/login', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
+  const state   = crypto.randomBytes(16).toString('hex');
   req.session.spotifyState = state;
 
   const spotify = buildSpotify();
   const authUrl = spotify.createAuthorizeURL(
-    ['user-read-email', 'user-read-private', 'user-read-recently-played', 'user-top-read'],
-    state
+    ['user-read-email',
+     'user-read-private',
+     'user-read-recently-played',
+     'user-top-read'],
+    state,
+    /* show_dialog */ true
   );
 
   res.redirect(authUrl);
