@@ -1,8 +1,10 @@
 import express from 'express';
-import SpotifyWebApi from 'spotify-web-api-node';
-import { v4 as uuid } from 'uuid';
-import tokenStore from '../utils/tokenStore.js';
+import bcrypt from 'bcrypt';
+import axios from 'axios';
+import qs from 'querystring';
 import User from '../models/User.js';
+
+
 
 
 const router = express.Router();
