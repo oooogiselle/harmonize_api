@@ -100,13 +100,19 @@ router.get('/api/me/spotify', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { name, username, password, accountType = 'user' } = req.body;
-    if (!name || !username || !password)
+    if (!name || !username || !password) {
+      console.error('Missing fields:', req.body);
       return res.status(400).json({ message: 'Missing fields' });
+    }
 
-    if (await User.exists({ username }))
+    const exists = await User.exists({ username });
+    if (exists) {
+      console.warn('Username already taken:', username);
       return res.status(409).json({ message: 'Username already taken' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
     const user = await User.create({
       name,
       username,
@@ -116,9 +122,10 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    console.error('Register error:', err);
+    console.error('Error in /register:', err); // 🛑 LOG THIS
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 
 export default router;
