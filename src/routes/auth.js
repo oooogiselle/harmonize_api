@@ -104,7 +104,7 @@ router.get('/api/me/spotify', async (req, res) => {
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, username, password, accountType = 'user' } = req.body;
+    const { name, username, email, password, accountType = 'user' } = req.body;
     if (!name || !username || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
@@ -114,11 +114,8 @@ router.post('/register', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
-      displayName: name,
-      username,
-      password: hash,
-      accountType,
-    });
+          displayName: name, username, email, password: hash, accountType,
+        });
 
     res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
