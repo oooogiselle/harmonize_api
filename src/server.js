@@ -46,7 +46,7 @@ app.use(
 app.use(express.json());
 
 /* ───────── routes ───────── */
-app.use('/',          authRoutes);        // /login, /spotify/callback, /api/me/spotify
+app.use('/auth',          authRoutes);        // /login, /spotify/callback, /api/me/spotify
 app.use('/spotify',   spotifyRoutes);     // /refresh  (no duplicate callback)
 app.use('/artists',   artistRoutes);
 app.use('/events',    eventRoutes);
