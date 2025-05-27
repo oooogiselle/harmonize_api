@@ -95,4 +95,30 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
+// routes/auth.js
+
+router.post('/register', async (req, res) => {
+  try {
+    const { name, username, password, accountType = 'user' } = req.body;
+    if (!name || !username || !password)
+      return res.status(400).json({ message: 'Missing fields' });
+
+    if (await User.exists({ username }))
+      return res.status(409).json({ message: 'Username already taken' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name,
+      username,
+      password: passwordHash,
+      accountType,
+    });
+
+    res.status(201).json({ message: 'User registered', userId: user._id });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 export default router;
