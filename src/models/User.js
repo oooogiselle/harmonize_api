@@ -1,18 +1,15 @@
-// models/User.js
+import mongoose from 'mongoose';
+
 const userSchema = new mongoose.Schema({
-  name:       { type: String, required: true },
-  username:   { type: String, required: true, unique: true },
-  email:      { type: String, required: true, unique: true },
-  password:   { type: String, required: true },
-  accountType:{ type: String, enum: ['user','artist'], default: 'user' },
+  displayName: { type: String, required: true },
+  username:    { type: String, required: true, unique: true },
+  email:       { type: String, required: false, unique: true, sparse: true },
+  password:    { type: String },
+  accountType: { type: String, enum: ['user', 'artist'], default: 'user' },
+  spotifyId:   { type: String, unique: true, sparse: true },
+}, {
+  timestamps: true,
+});
 
-  // filled in *after* OAuth
-  spotifyId:  { type: String, unique: true, sparse: true },   // ← add sparse
-  refreshToken: String,
-  accessToken:  String,
-  tokenExpiresAt: Date,
-}, { timestamps: true });
-
-// keep the compound index explicit as well (good practice)
-userSchema.index({ spotifyId: 1 }, { unique: true, sparse: true });
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+export default User;

@@ -121,7 +121,7 @@ router.post('/register', async (req, res) => {
       email       : email?.toLowerCase(),
       password    : hash,
       accountType,
-      spotifyId   : null, 
+      // Remove spotifyId: null - let it be undefined initially
     });
 
     return res.status(201).json({ message: 'User registered', userId: user._id });
