@@ -40,7 +40,7 @@ router.get('/spotify/login', (req, res) => {
     /* show_dialog */ true
   );
 
-  res.redirect(authUrl);
+  res.redirect(url);
 });
 
 
