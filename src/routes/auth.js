@@ -13,20 +13,19 @@ const {
   FRONTEND_BASE_URL,
 } = process.env;
 
-/* helper to build a Spotify API client */
 function buildSpotify() {
   return new SpotifyWebApi({
-    clientId:     SPOTIFY_CLIENT_ID,
+    clientId: SPOTIFY_CLIENT_ID,
     clientSecret: SPOTIFY_CLIENT_SECRET,
-    redirectUri:  SPOTIFY_REDIRECT_URI,
+    redirectUri: SPOTIFY_REDIRECT_URI,
   });
 }
 
-/* ───────── STEP 1  /login ───────── */
+/* ───── STEP 1: /login ───── */
 router.get('/login', (req, res) => {
-  const spotify   = buildSpotify();
-  const state     = uuid();
-  req.session.spotifyState = state;           // <‑‑ save in cookie
+  const spotify = buildSpotify();
+  const state = uuid();
+  req.session.spotifyState = state;
 
   const url = spotify.createAuthorizeURL(
     [
@@ -40,7 +39,7 @@ router.get('/login', (req, res) => {
   res.redirect(url);
 });
 
-/* ───────── STEP 2  /spotify/callback ───────── */
+/* ───── STEP 2: /spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
   if (state !== req.session.spotifyState)
@@ -53,17 +52,15 @@ router.get('/spotify/callback', async (req, res) => {
     const { access_token, refresh_token, expires_in } = body;
 
     spotify.setAccessToken(access_token);
-
     const { body: me } = await spotify.getMe();
 
-    // save tokens in memory (for demo) keyed by spotify id
     tokenStore.save(me.id, {
       access_token,
       refresh_token,
       expires_at: Date.now() + expires_in * 1000,
     });
 
-    req.session.userId = me.id;      // <-- save who is logged‑in
+    req.session.userId = me.id;
     res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (err) {
     console.error('callback error', err.body || err.message);
@@ -71,7 +68,7 @@ router.get('/spotify/callback', async (req, res) => {
   }
 });
 
-/* ───────── Dashboard data  /api/me/spotify ───────── */
+/* ───── Rich Spotify Data: /api/me/spotify ───── */
 router.get('/api/me/spotify', async (req, res) => {
   const userId = req.session.userId;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
@@ -103,24 +100,26 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-// ✅ Register route: POST /auth/register
+/* ───── Register: POST /auth/register ───── */
 router.post('/auth/register', async (req, res) => {
   const { username, email, password, accountType } = req.body;
-  const role = accountType;
 
-  if (!username || !email || !password || !role) {
+  if (!username || !email || !password || !accountType) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    const newUser = await User.create({ username, email, password, role });
+    const newUser = await User.create({
+      username,
+      email,
+      password,
+      role: accountType,
+    });
     res.status(201).json({ message: 'User registered', user: newUser });
   } catch (err) {
     console.error('Registration failed:', err);
     res.status(400).json({ error: 'Registration failed', details: err });
   }
 });
-
-
 
 export default router;
