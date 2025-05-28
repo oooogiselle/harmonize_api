@@ -5,7 +5,6 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
 import User from '../models/User.js';
 import tokenStore from '../utils/tokenStore.js';
-import User from '../models/User.js';
 import bcrypt from 'bcrypt';
 
 const router = express.Router();
@@ -69,7 +68,6 @@ router.get('/spotify/callback', async (req, res) => {
     });
 
     req.session.userId = me.id;
-    req.session.userId = me.id;
     res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (err) {
     console.error('Spotify callback error:', err.body || err.message);
@@ -83,7 +81,6 @@ router.get('/api/me/spotify', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
   const tokens = tokenStore.get(userId);
-  if (!tokens) return res.status(403).json({ error: 'No token' });
   if (!tokens) return res.status(403).json({ error: 'No token' });
 
   const spotify = buildSpotify();
