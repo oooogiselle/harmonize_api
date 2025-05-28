@@ -6,7 +6,12 @@ const userSchema = new mongoose.Schema({
   email:       { type: String, required: false, unique: true, sparse: true },
   password:    { type: String },
   accountType: { type: String, enum: ['user', 'artist'], default: 'user' },
-  spotifyId:   { type: String, unique: true, sparse: true },
+  spotifyId:   { 
+    type: String, 
+    unique: true, 
+    sparse: true,
+    default: undefined  // Explicitly set default to undefined instead of null
+  },
 }, {
   timestamps: true,
 });
