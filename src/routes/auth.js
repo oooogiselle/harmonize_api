@@ -22,8 +22,8 @@ function buildSpotify() {
   });
 }
 
-/* ───── STEP 1: /login ───── */
-router.get('/login', (req, res) => {
+/* ───── STEP 1: /spotify/login ───── */
+router.get('/spotify/login', (req, res) => {
   const spotify = buildSpotify();
   const state = uuid();
   req.session.spotifyState = state;
@@ -39,6 +39,7 @@ router.get('/login', (req, res) => {
   );
   res.redirect(url);
 });
+
 
 /* ───── STEP 2: /spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
