@@ -105,7 +105,8 @@ router.get('/api/me/spotify', async (req, res) => {
 
 // ✅ Register route: POST /auth/register
 router.post('/auth/register', async (req, res) => {
-  const { username, email, password, role } = req.body;
+  const { username, email, password, accountType } = req.body;
+  const role = accountType;
 
   if (!username || !email || !password || !role) {
     return res.status(400).json({ error: 'Missing required fields' });
