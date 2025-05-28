@@ -70,14 +70,28 @@ router.post('/logout', (req, res) => {
 
 /* ───── SPOTIFY LOGIN: /auth/spotify/login ───── */
 router.get('/spotify/login', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  req.session.spotifyState = state;
+  try {
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.spotifyState = state;
 
-  const spotify = buildSpotify();
-  const scopes = ['user-read-private', 'user-read-email', 'user-top-read', 'user-read-recently-played'];
-  const authorizeURL = spotify.createAuthorizeURL(scopes, state);
-
-  res.redirect(authorizeURL);
+    const spotify = buildSpotify();
+    const scopes = [
+      'user-read-private', 
+      'user-read-email', 
+      'user-top-read', 
+      'user-read-recently-played',
+      'user-read-playback-state',
+      'user-modify-playback-state'
+    ];
+    
+    const authorizeURL = spotify.createAuthorizeURL(scopes, state);
+    console.log('Redirecting to Spotify auth URL:', authorizeURL);
+    
+    res.redirect(authorizeURL);
+  } catch (err) {
+    console.error('Spotify login error:', err);
+    res.status(500).json({ error: 'Failed to initiate Spotify login' });
+  }
 });
 
 /* ───── SPOTIFY CALLBACK: /auth/spotify/callback ───── */
