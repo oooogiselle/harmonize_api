@@ -20,9 +20,7 @@ const {
 function buildSpotify() {
   return new SpotifyWebApi({
     clientId: SPOTIFY_CLIENT_ID,
-    clientId: SPOTIFY_CLIENT_ID,
     clientSecret: SPOTIFY_CLIENT_SECRET,
-    redirectUri: SPOTIFY_REDIRECT_URI,
     redirectUri: SPOTIFY_REDIRECT_URI,
   });
 }
