@@ -117,23 +117,17 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
       displayName : name,
-      username    : username.toLowerCase(),  // normalise if you like
+      username    : username.toLowerCase(),
       email       : email?.toLowerCase(),
       password    : hash,
       accountType,
-      spotifyId: {
-        type: String,
-        unique: true,
-        sparse: true,
-      },
-      
+      spotifyId   : null, // ✅ Correct: do not pass a schema definition object here
     });
 
     return res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    // ── graceful handling of race‑condition duplicates ──
     if (err.code === 11000) {
-      const dupField = Object.keys(err.keyPattern)[0];   // 'username' or 'email'
+      const dupField = Object.keys(err.keyPattern)[0];
       return res.status(409).json({ message: `${dupField} already in use` });
     }
     console.error('💥 /register failed:', err);
