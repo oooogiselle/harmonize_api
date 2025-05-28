@@ -47,7 +47,7 @@ app.use(
 app.use(express.json());
 
 /* ───────── Route setup ───────── */
-app.use('/',          authRoutes);      // /login, /callback, /api/me/spotify, /auth/register
+app.use('/auth',          authRoutes);      // /login, /callback, /api/me/spotify, /auth/register
 app.use('/spotify',   spotifyRoutes);   // /spotify/refresh
 app.use('/artists',   artistRoutes);    // /artists/*
 app.use('/events',    eventRoutes);     // /events/*
