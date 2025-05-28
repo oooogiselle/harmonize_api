@@ -5,6 +5,8 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
 import User from '../models/User.js';
 import tokenStore from '../utils/tokenStore.js';
+import User from '../models/User.js';
+import bcrypt from 'bcrypt';
 
 const router = express.Router();
 
@@ -15,26 +17,29 @@ const {
   FRONTEND_BASE_URL,
 } = process.env;
 
-/* ───────── Spotify client builder ───────── */
 function buildSpotify() {
   return new SpotifyWebApi({
     clientId: SPOTIFY_CLIENT_ID,
+    clientId: SPOTIFY_CLIENT_ID,
     clientSecret: SPOTIFY_CLIENT_SECRET,
+    redirectUri: SPOTIFY_REDIRECT_URI,
     redirectUri: SPOTIFY_REDIRECT_URI,
   });
 }
 
-/* ───────── STEP 1  /auth/spotify/login ───────── */
+/* ───── STEP 1: /spotify/login ───── */
 router.get('/spotify/login', (req, res) => {
-  const state   = crypto.randomBytes(16).toString('hex');
+  const spotify = buildSpotify();
+  const state = uuid();
   req.session.spotifyState = state;
 
-  const spotify = buildSpotify();
-  const authUrl = spotify.createAuthorizeURL(
-    ['user-read-email',
-     'user-read-private',
-     'user-read-recently-played',
-     'user-top-read'],
+  const url = spotify.createAuthorizeURL(
+    [
+      'user-read-email',
+      'user-read-private',
+      'user-read-recently-played',
+      'user-top-read',
+    ],
     state,
     /* show_dialog */ true
   );
@@ -42,7 +47,8 @@ router.get('/spotify/login', (req, res) => {
   res.redirect(authUrl);
 });
 
-/* ───────── STEP 2  /auth/spotify/callback ───────── */
+
+/* ───── STEP 2: /spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
   if (state !== req.session.spotifyState)
@@ -65,6 +71,7 @@ router.get('/spotify/callback', async (req, res) => {
     });
 
     req.session.userId = me.id;
+    req.session.userId = me.id;
     res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (err) {
     console.error('Spotify callback error:', err.body || err.message);
@@ -72,12 +79,13 @@ router.get('/spotify/callback', async (req, res) => {
   }
 });
 
-/* ───────── Fetch data  /auth/api/me/spotify ───────── */
+/* ───── Rich Spotify Data: /api/me/spotify ───── */
 router.get('/api/me/spotify', async (req, res) => {
   const userId = req.session.userId;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
   const tokens = tokenStore.get(userId);
+  if (!tokens) return res.status(403).json({ error: 'No token' });
   if (!tokens) return res.status(403).json({ error: 'No token' });
 
   const spotify = buildSpotify();
@@ -85,14 +93,21 @@ router.get('/api/me/spotify', async (req, res) => {
   spotify.setRefreshToken(tokens.refresh_token);
 
   try {
-    const [profile, top] = await Promise.all([
+    const [profile, topTracks, topArtists, recentlyPlayed] = await Promise.all([
       spotify.getMe(),
       spotify.getMyTopTracks({ limit: 10 }),
+      spotify.getMyTopArtists({ limit: 10 }),
+      spotify.getMyRecentlyPlayedTracks({ limit: 10 }),
     ]);
 
-    res.json({ profile: profile.body, top: top.body.items });
+    res.json({
+      profile: profile.body,
+      top: topTracks.body.items,
+      top_artists: topArtists.body.items,
+      recent: recentlyPlayed.body.items,
+    });
   } catch (err) {
-    console.error(err.body || err.message);
+    console.error('Spotify API failed:', err.body || err.message);
     res.status(500).json({ error: 'Spotify API failed' });
   }
 });
@@ -112,23 +127,22 @@ router.post('/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({
       displayName : name,
-      username    : username.toLowerCase(),  // normalise if you like
+      username    : username.toLowerCase(),
       email       : email?.toLowerCase(),
       password    : hash,
       accountType,
+      // Don't set spotifyId at all - it will be undefined by default
     });
 
     return res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    // ── graceful handling of race‑condition duplicates ──
     if (err.code === 11000) {
-      const dupField = Object.keys(err.keyPattern)[0];   // 'username' or 'email'
+      const dupField = Object.keys(err.keyPattern)[0];
       return res.status(409).json({ message: `${dupField} already in use` });
     }
     console.error('💥 /register failed:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
-
 
 export default router;
