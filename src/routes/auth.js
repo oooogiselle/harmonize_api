@@ -2,6 +2,7 @@ import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
 import tokenStore from '../utils/tokenStore.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
@@ -101,6 +102,24 @@ router.get('/api/me/spotify', async (req, res) => {
     res.status(500).json({ error: 'Spotify API failed' });
   }
 });
+
+// ✅ Register route: POST /auth/register
+router.post('/auth/register', async (req, res) => {
+  const { username, email, password, role } = req.body;
+
+  if (!username || !email || !password || !role) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const newUser = await User.create({ username, email, password, role });
+    res.status(201).json({ message: 'User registered', user: newUser });
+  } catch (err) {
+    console.error('Registration failed:', err);
+    res.status(400).json({ error: 'Registration failed', details: err });
+  }
+});
+
 
 
 export default router;
