@@ -1,5 +1,4 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
