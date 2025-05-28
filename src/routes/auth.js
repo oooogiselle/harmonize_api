@@ -1,6 +1,9 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { v4 as uuid } from 'uuid';
+import User from '../models/User.js';
 import tokenStore from '../utils/tokenStore.js';
 import User from '../models/User.js';
 import bcrypt from 'bcrypt';
@@ -17,7 +20,9 @@ const {
 function buildSpotify() {
   return new SpotifyWebApi({
     clientId: SPOTIFY_CLIENT_ID,
+    clientId: SPOTIFY_CLIENT_ID,
     clientSecret: SPOTIFY_CLIENT_SECRET,
+    redirectUri: SPOTIFY_REDIRECT_URI,
     redirectUri: SPOTIFY_REDIRECT_URI,
   });
 }
@@ -36,8 +41,10 @@ router.get('/spotify/login', (req, res) => {
       'user-top-read',
     ],
     state,
+    /* show_dialog */ true
   );
-  res.redirect(url);
+
+  res.redirect(authUrl);
 });
 
 
@@ -47,9 +54,10 @@ router.get('/spotify/callback', async (req, res) => {
   if (state !== req.session.spotifyState)
     return res.status(400).send('State mismatch');
 
-  const spotify = buildSpotify();
+  delete req.session.spotifyState;
 
   try {
+    const spotify = buildSpotify();
     const { body } = await spotify.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = body;
 
@@ -63,9 +71,10 @@ router.get('/spotify/callback', async (req, res) => {
     });
 
     req.session.userId = me.id;
+    req.session.userId = me.id;
     res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (err) {
-    console.error('callback error', err.body || err.message);
+    console.error('Spotify callback error:', err.body || err.message);
     res.status(500).send('OAuth failed');
   }
 });
@@ -76,6 +85,7 @@ router.get('/api/me/spotify', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
   const tokens = tokenStore.get(userId);
+  if (!tokens) return res.status(403).json({ error: 'No token' });
   if (!tokens) return res.status(403).json({ error: 'No token' });
 
   const spotify = buildSpotify();
