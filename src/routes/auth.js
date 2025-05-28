@@ -121,7 +121,12 @@ router.post('/register', async (req, res) => {
       email       : email?.toLowerCase(),
       password    : hash,
       accountType,
-      spotifyId   : null, // explicitly set as null for non-Spotify registrations
+      spotifyId: {
+        type: String,
+        unique: true,
+        sparse: true,
+      },
+      
     });
 
     return res.status(201).json({ message: 'User registered', userId: user._id });
