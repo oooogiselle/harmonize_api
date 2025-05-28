@@ -76,23 +76,31 @@ router.get('/api/me/spotify', async (req, res) => {
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
   const tokens = tokenStore.get(userId);
-  if (!tokens)  return res.status(403).json({ error: 'No token' });
+  if (!tokens) return res.status(403).json({ error: 'No token' });
 
   const spotify = buildSpotify();
   spotify.setAccessToken(tokens.access_token);
   spotify.setRefreshToken(tokens.refresh_token);
 
   try {
-    const [ profile, top ] = await Promise.all([
+    const [profile, topTracks, topArtists, recentlyPlayed] = await Promise.all([
       spotify.getMe(),
       spotify.getMyTopTracks({ limit: 10 }),
+      spotify.getMyTopArtists({ limit: 10 }),
+      spotify.getMyRecentlyPlayedTracks({ limit: 10 }),
     ]);
 
-    res.json({ profile: profile.body, top: top.body.items });
+    res.json({
+      profile: profile.body,
+      top: topTracks.body.items,
+      top_artists: topArtists.body.items,
+      recent: recentlyPlayed.body.items,
+    });
   } catch (err) {
-    console.error(err.body || err.message);
+    console.error('Spotify API failed:', err.body || err.message);
     res.status(500).json({ error: 'Spotify API failed' });
   }
 });
+
 
 export default router;
