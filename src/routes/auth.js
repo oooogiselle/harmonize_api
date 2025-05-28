@@ -109,10 +109,8 @@ router.post('/register', async (req, res) => {
     if (!name || !username || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
-    const $or = [ { username } ];
-    if (email) $or.push({ email });
-
-    const taken = await User.exists({ $or });
+    // ── pre‑flight uniqueness check ──
+    const taken = await User.exists({ $or: [ { username }, { email } ] });
     if (taken)
       return res.status(409).json({ message: 'Username or e‑mail already taken' });
 
