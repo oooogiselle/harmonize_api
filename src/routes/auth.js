@@ -100,25 +100,37 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-/* ───── Register: POST /auth/register ───── */
-router.post('/auth/register', async (req, res) => {
-  const { username, email, password, accountType } = req.body;
-
-  if (!username || !email || !password || !accountType) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
+/* ───────── Register  /auth/register ───────── */
+router.post('/register', async (req, res) => {
   try {
-    const newUser = await User.create({
-      username,
-      email,
-      password,
-      role: accountType,
+    const { name, username, email, password, accountType = 'user' } = req.body;
+    if (!name || !username || !password)
+      return res.status(400).json({ message: 'Missing fields' });
+
+    // ── pre‑flight uniqueness check ──
+    const taken = await User.exists({ $or: [ { username }, { email } ] });
+    if (taken)
+      return res.status(409).json({ message: 'Username or e‑mail already taken' });
+
+    const hash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      displayName : name,
+      username    : username.toLowerCase(),  // normalise if you like
+      email       : email?.toLowerCase(),
+      password    : hash,
+      accountType,
+      spotifyId   : null, // explicitly set as null for non-Spotify registrations
     });
-    res.status(201).json({ message: 'User registered', user: newUser });
+
+    return res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
-    console.error('Registration failed:', err);
-    res.status(400).json({ error: 'Registration failed', details: err });
+    // ── graceful handling of race‑condition duplicates ──
+    if (err.code === 11000) {
+      const dupField = Object.keys(err.keyPattern)[0];   // 'username' or 'email'
+      return res.status(409).json({ message: `${dupField} already in use` });
+    }
+    console.error('💥 /register failed:', err);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
