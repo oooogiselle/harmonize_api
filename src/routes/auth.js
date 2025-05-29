@@ -102,6 +102,11 @@ router.get('/spotify/callback', async (req, res) => {
 
   delete req.session.spotifyState;
 
+  // Check if user is logged in to your app
+  if (!req.session.userId) {
+    return res.status(401).send('User not logged in to the app');
+  }
+
   try {
     const spotify = buildSpotify();
     const { body } = await spotify.authorizationCodeGrant(code);
@@ -110,13 +115,20 @@ router.get('/spotify/callback', async (req, res) => {
     spotify.setAccessToken(access_token);
     const { body: me } = await spotify.getMe();
 
-    tokenStore.save(me.id, {
+    // Store tokens using your app's user ID, not Spotify's user ID
+    tokenStore.save(req.session.userId, {
       access_token,
       refresh_token,
       expires_at: Date.now() + expires_in * 1000,
+      spotifyId: me.id, // Store Spotify ID for reference if needed
     });
 
-    req.session.userId = me.id;
+    // Update your user record with Spotify ID
+    await User.findByIdAndUpdate(req.session.userId, {
+      spotifyId: me.id
+    });
+
+    // Don't change the session userId - keep it as your app's user ID
     res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
   } catch (err) {
     console.error('Spotify callback error:', err.body || err.message);
