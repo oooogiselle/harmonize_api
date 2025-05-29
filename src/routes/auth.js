@@ -94,7 +94,6 @@ router.get('/spotify/login', (req, res) => {
   }
 });
 
-/* ───── SPOTIFY CALLBACK: /auth/spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
   const code = req.query.code;
 
@@ -110,54 +109,52 @@ router.get('/spotify/callback', async (req, res) => {
     const { body } = await api.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = body;
 
-    console.log('[Callback] Access token:', access_token);
-    console.log('[Callback] Expires in:', expires_in);
-
     api.setAccessToken(access_token);
     api.setRefreshToken(refresh_token);
 
     const me = await api.getMe();
     console.log('[Callback] Spotify profile:', me.body);
 
-    // Try to find existing user
+    // 🧠 Step 1: Check if user exists by Spotify ID
     let user = await User.findOne({ spotifyId: me.body.id });
 
-    // Create new user if not found
+    // 🔍 Step 2: If not found, try matching by email
     if (!user) {
-      try {
-        user = await User.create({
-          spotifyId: me.body.id,
-          displayName: me.body.display_name || 'Spotify User',
-          email: me.body.email,
-          username: me.body.id, // fallback
-          accountType: 'user',
-        });
-        console.log('[Callback] New user created:', user._id);
-      } catch (createErr) {
-        console.error('[Callback] User creation failed:', createErr);
-        return res.status(500).json({ error: 'Failed to create Spotify user' });
+      user = await User.findOne({ email: me.body.email });
+      if (user) {
+        console.log('[Callback] Matched user by email:', user._id);
+        user.spotifyId = me.body.id;
       }
-    } else {
-      console.log('[Callback] Existing user found:', user._id);
     }
 
-    // Save tokens
+    // 🆕 Step 3: Create if still no match
+    if (!user) {
+      user = await User.create({
+        spotifyId: me.body.id,
+        displayName: me.body.display_name || 'Spotify User',
+        email: me.body.email,
+        username: me.body.id, // fallback
+        accountType: 'user',
+      });
+      console.log('[Callback] Created new user:', user._id);
+    }
+
+    // 💾 Step 4: Save tokens and session
     user.spotifyAccessToken = access_token;
     user.spotifyRefreshToken = refresh_token;
     user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
     await user.save();
 
-    // Save session
     req.session.userId = user._id;
-    console.log('[Callback] Session set for userId:', user._id);
+    console.log('[Callback] Session userId set:', user._id);
 
-    // Redirect
     res.redirect('/dashboard');
   } catch (err) {
     console.error('[Callback] Spotify authorization failed:', err.body || err.message || err);
     res.status(500).json({ error: 'Spotify authorization failed' });
   }
 });
+
 
 
 
