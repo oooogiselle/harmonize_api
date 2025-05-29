@@ -7,6 +7,10 @@ const userSchema = new mongoose.Schema({
   password:    { type: String },
   accountType: { type: String, enum: ['user', 'artist'], default: 'user' },
   spotifyId:   { type: String, unique: true, sparse: true },
+  spotifyAccessToken: String,
+  spotifyRefreshToken: String,
+  spotifyTokenExpiresAt: Date
+
 }, {
   timestamps: true,
 });
