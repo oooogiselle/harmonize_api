@@ -96,43 +96,42 @@ router.get('/spotify/login', (req, res) => {
 
 /* ───── SPOTIFY CALLBACK: /auth/spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
-  const { code, state } = req.query;
-  if (state !== req.session.spotifyState)
-    return res.status(400).send('State mismatch');
-
-  delete req.session.spotifyState;
-
-  // Check if user is logged in to your app
-  if (!req.session.userId) {
-    return res.status(401).send('User not logged in to the app');
-  }
+  const code = req.query.code;
+  const api = new SpotifyWebApi({
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    redirectUri: process.env.SPOTIFY_REDIRECT_URI,
+  });
 
   try {
-    const spotify = buildSpotify();
-    const { body } = await spotify.authorizationCodeGrant(code);
+    const { body } = await api.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = body;
 
-    spotify.setAccessToken(access_token);
-    const { body: me } = await spotify.getMe();
+    api.setAccessToken(access_token);
+    api.setRefreshToken(refresh_token);
 
-    // Store tokens using your app's user ID, not Spotify's user ID
-    tokenStore.save(req.session.userId, {
-      access_token,
-      refresh_token,
-      expires_at: Date.now() + expires_in * 1000,
-      spotifyId: me.id, // Store Spotify ID for reference if needed
-    });
+    const me = await api.getMe();
 
-    // Update your user record with Spotify ID
-    await User.findByIdAndUpdate(req.session.userId, {
-      spotifyId: me.id
-    });
+    // Find user by Spotify ID (or however you associate them)
+    const user = await User.findOne({ spotifyId: me.body.id });
 
-    // Don't change the session userId - keep it as your app's user ID
-    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Save tokens to DB
+    user.spotifyAccessToken = access_token;
+    user.spotifyRefreshToken = refresh_token;
+    user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
+    await user.save();
+
+    // Optional: store user ID in session
+    req.session.userId = user._id;
+
+    res.redirect('/dashboard'); // Or wherever you want to redirect
   } catch (err) {
-    console.error('Spotify callback error:', err.body || err.message);
-    res.status(500).send('OAuth failed');
+    console.error('Spotify callback error:', err);
+    res.status(500).json({ error: 'Spotify authorization failed' });
   }
 });
 
