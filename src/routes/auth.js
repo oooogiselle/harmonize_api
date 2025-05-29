@@ -112,28 +112,33 @@ router.get('/spotify/callback', async (req, res) => {
 
     const me = await api.getMe();
 
-    // Find user by Spotify ID (or however you associate them)
-    const user = await User.findOne({ spotifyId: me.body.id });
+    // ✅ Auto-create user if not found
+    let user = await User.findOne({ spotifyId: me.body.id });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      user = await User.create({
+        spotifyId: me.body.id,
+        displayName: me.body.display_name,
+        email: me.body.email,
+        username: me.body.id,
+        accountType: 'user',
+      });
     }
 
-    // Save tokens to DB
+    // ✅ Save tokens and update session
     user.spotifyAccessToken = access_token;
     user.spotifyRefreshToken = refresh_token;
     user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
     await user.save();
 
-    // Optional: store user ID in session
     req.session.userId = user._id;
-
-    res.redirect('/dashboard'); // Or wherever you want to redirect
+    res.redirect('/dashboard');
   } catch (err) {
     console.error('Spotify callback error:', err);
     res.status(500).json({ error: 'Spotify authorization failed' });
   }
 });
+
 
 /* ───── Rich Spotify Data: /auth/api/me/spotify ───── */
 router.get('/api/me/spotify', async (req, res) => {
