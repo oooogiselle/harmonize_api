@@ -3,8 +3,9 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'cookie-session';
-
 import tilesRouter from './routes/tiles.js';
+import friendsRouter from './routes/friends.js';
+import eventRouter from './routes/events.js';
 import spotifyRoutes from './routes/spotify.js';
 import authRoutes from './routes/auth.js';
 
@@ -40,6 +41,8 @@ app.use(express.json());
 
 app.use('/api/tiles', tilesRouter);
 app.use('/api/auth', authRoutes);
+app.use('/api/friends', friendsRouter);
+app.use('/api/events', eventRouter)
 app.use('/auth', authRoutes);
 app.use('/auth', spotifyRoutes);
 
