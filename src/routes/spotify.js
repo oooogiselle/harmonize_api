@@ -8,8 +8,11 @@ router.get('/refresh', async (req, res) => {
   const userId = req.session.userId;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
-  const tokens = tokenStore.get(userId);
-  if (!tokens) return res.status(403).json({ error: 'No token' });
+  const user = await User.findById(userId);
+  if (!user || !user.spotifyRefreshToken) {
+    return res.status(403).json({ error: 'No token' });
+  }
+    if (!tokens) return res.status(403).json({ error: 'No token' });
 
   const api = new SpotifyWebApi({
     clientId:     process.env.SPOTIFY_CLIENT_ID,
@@ -21,7 +24,10 @@ router.get('/refresh', async (req, res) => {
     const { body } = await api.refreshAccessToken();
     tokens.access_token  = body.access_token;
     tokens.expires_at    = Date.now() + body.expires_in * 1000;
-    tokenStore.save(userId, tokens);
+    user.spotifyAccessToken = body.access_token;
+    user.spotifyTokenExpiresAt = new Date(Date.now() + body.expires_in * 1000);
+    await user.save();
+
     res.json({ access_token: body.access_token });
   } catch (err) {
     console.error(err);

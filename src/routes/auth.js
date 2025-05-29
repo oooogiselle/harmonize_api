@@ -96,34 +96,44 @@ router.get('/spotify/login', (req, res) => {
 
 /* ───── SPOTIFY CALLBACK: /auth/spotify/callback ───── */
 router.get('/spotify/callback', async (req, res) => {
-  const { code, state } = req.query;
-  if (state !== req.session.spotifyState)
-    return res.status(400).send('State mismatch');
-
-  delete req.session.spotifyState;
+  const code = req.query.code;
+  const api = new SpotifyWebApi({
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    redirectUri: process.env.SPOTIFY_REDIRECT_URI,
+  });
 
   try {
-    const spotify = buildSpotify();
-    const { body } = await spotify.authorizationCodeGrant(code);
+    const { body } = await api.authorizationCodeGrant(code);
     const { access_token, refresh_token, expires_in } = body;
 
-    spotify.setAccessToken(access_token);
-    const { body: me } = await spotify.getMe();
+    api.setAccessToken(access_token);
+    api.setRefreshToken(refresh_token);
 
-    tokenStore.save(me.id, {
-      access_token,
-      refresh_token,
-      expires_at: Date.now() + expires_in * 1000,
-    });
+    const me = await api.getMe();
 
-    req.session.userId = me.id;
-    res.redirect(`${FRONTEND_BASE_URL}/dashboard`);
+    // Find user by Spotify ID (or however you associate them)
+    const user = await User.findOne({ spotifyId: me.body.id });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Save tokens to DB
+    user.spotifyAccessToken = access_token;
+    user.spotifyRefreshToken = refresh_token;
+    user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
+    await user.save();
+
+    // Optional: store user ID in session
+    req.session.userId = user._id;
+
+    res.redirect('/dashboard'); // Or wherever you want to redirect
   } catch (err) {
-    console.error('Spotify callback error:', err.body || err.message);
-    res.status(500).send('OAuth failed');
+    console.error('Spotify callback error:', err);
+    res.status(500).json({ error: 'Spotify authorization failed' });
   }
 });
-
 /* ───── Rich Spotify Data: /auth/api/me/spotify ───── */
 router.get('/api/me/spotify', async (req, res) => {
   const userId = req.session.userId;
