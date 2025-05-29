@@ -148,7 +148,7 @@ router.get('/spotify/callback', async (req, res) => {
     req.session.userId = user._id;
     console.log('[Callback] Session userId set:', user._id);
 
-    res.redirect('/dashboard');
+    res.redirect(`${process.env.FRONTEND_BASE_URL}/profile`);
   } catch (err) {
     console.error('[Callback] Spotify authorization failed:', err.body || err.message || err);
     res.status(500).json({ error: 'Spotify authorization failed' });
