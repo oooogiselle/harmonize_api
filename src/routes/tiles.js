@@ -5,12 +5,10 @@ import Tile from '../models/Tile.js';
 
 const router = express.Router();
 
-// POST /api/tiles
+// POST /api/tiles — Create new tile
 router.post('/', async (req, res) => {
   try {
     console.log('[POST /api/tiles] Request body:', req.body);
-
-    // 🔧 Convert userId to ObjectId
     const data = {
       ...req.body,
       userId: new mongoose.Types.ObjectId(req.body.userId),
@@ -19,12 +17,12 @@ router.post('/', async (req, res) => {
     const tile = await Tile.create(data);
     res.status(201).json(tile);
   } catch (err) {
-    console.error('Tile POST error:', err.message, err.stack); // 👀 More helpful error
+    console.error('Tile POST error:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to create tile' });
   }
 });
 
-// GET /api/tiles/:userId
+// GET /api/tiles/:userId — Fetch all tiles for a user
 router.get('/:userId', async (req, res) => {
   try {
     const tiles = await Tile.find({ userId: req.params.userId });
@@ -34,7 +32,7 @@ router.get('/:userId', async (req, res) => {
   }
 });
 
-// PATCH /api/tiles/:id
+// PATCH /api/tiles/:id — Update individual tile
 router.patch('/:id', async (req, res) => {
   try {
     const updated = await Tile.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -46,7 +44,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/tiles/:id
+// DELETE /api/tiles/:id — Delete tile
 router.delete('/:id', async (req, res) => {
   try {
     const deleted = await Tile.findByIdAndDelete(req.params.id);
@@ -55,6 +53,29 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('Tile DELETE error:', err);
     res.status(500).json({ error: 'Failed to delete tile' });
+  }
+});
+
+// ✅ NEW: PUT /api/tiles/layout — Bulk update tile layout
+router.put('/layout', async (req, res) => {
+  try {
+    const { updates } = req.body;
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: 'Invalid layout update format' });
+    }
+
+    const bulkOps = updates.map(({ id, x, y, w, h }) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { $set: { x, y, w, h } },
+      },
+    }));
+
+    await Tile.bulkWrite(bulkOps);
+    res.status(200).json({ message: 'Layout updated successfully' });
+  } catch (err) {
+    console.error('Tile LAYOUT update error:', err);
+    res.status(500).json({ error: 'Failed to update layout' });
   }
 });
 
