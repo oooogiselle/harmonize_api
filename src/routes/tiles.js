@@ -56,9 +56,10 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// ✅ NEW: PUT /api/tiles/layout — Bulk update tile layout
-router.put('/layout', async (req, res) => {
+// FIXED: Changed to PATCH /api/tiles/bulk-layout to match frontend call
+router.patch('/bulk-layout', async (req, res) => {
   try {
+    console.log('[PATCH /api/tiles/bulk-layout] Request body:', req.body);
     const { updates } = req.body;
     if (!Array.isArray(updates)) {
       return res.status(400).json({ error: 'Invalid layout update format' });
@@ -71,7 +72,8 @@ router.put('/layout', async (req, res) => {
       },
     }));
 
-    await Tile.bulkWrite(bulkOps);
+    const result = await Tile.bulkWrite(bulkOps);
+    console.log('[PATCH /api/tiles/bulk-layout] Bulk write result:', result);
     res.status(200).json({ message: 'Layout updated successfully' });
   } catch (err) {
     console.error('Tile LAYOUT update error:', err);
