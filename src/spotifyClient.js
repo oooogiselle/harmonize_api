@@ -2,7 +2,7 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import User from './models/User.js';
 
 /* ───── add this helper ───── */
-async function getAccessToken() {
+export async function getAccessToken() {
   const client = new SpotifyWebApi({
     clientId:     process.env.SPOTIFY_CLIENT_ID,
     clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
