@@ -1,6 +1,7 @@
 import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
 import tokenStore from '../utils/tokenStore.js';
+import { getAccessToken, spotifyApi } from '../spotifyClient.js';
 
 const router = express.Router();
 
@@ -47,25 +48,22 @@ async function getAppSpotify() {
 
 /* ------------- NEW: /spotify/search?q=artist name ------------- */
 router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').trim();
-  if (!q) return res.status(400).json({ error: 'Missing q param' });
-
   try {
-    const api = await getAppSpotify();
-    const { body } = await api.searchArtists(q, { limit: 10 });
+    const { q, type } = req.query;
+    if (!q || !type) return res.status(400).json({ error: 'Missing q or type' });
 
-    const results = body.artists.items.map(a => ({
-      id: a.id,
-      name: a.name,
-      image: a.images?.[0]?.url ?? null,
-      genres: a.genres ?? [],
-      popularity: a.popularity,
-    }));
+    // Refresh token
+    const token = await getAccessToken();
+    spotifyApi.setAccessToken(token);
 
-    res.json(results);
+    // Call Spotify API
+    const result = await spotifyApi.search(q, [type]);
+
+    // Wrap response so frontend can access `.artists.items`
+    res.json({ artists: result.body.artists });
   } catch (err) {
-    console.error('Spotify search error', err.body || err.message);
-    res.status(500).json({ error: 'Search failed' });
+    console.error('Spotify search failed:', err);
+    res.status(500).json({ error: 'Failed to search Spotify' });
   }
 });
 
