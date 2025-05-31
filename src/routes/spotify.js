@@ -1,26 +1,3 @@
-my search bar used to be able to search up artists on spotify and bring up their results but for some reason after changing some code, it stopped working. can you fix that
-
-Looking at your code, I can see the issue. Your search functionality appears to be broken because there's a mismatch between what your frontend expects and what your backend provides.
-
-In SearchResults.jsx, you're fetching from /spotify/search?q=${query} and expecting an array of results, but your backend /spotify/search route expects both q and type parameters and returns an object with either artists or tracks properties.
-
-Let me fix this by updating your backend to handle artist searches properly:
-
-The main issues were:
-
-    Missing default type: Your SearchResults.jsx calls /spotify/search?q=${query} without a type parameter, but your backend required both q and type. I added a default type = 'artist'.
-    Response format mismatch: Your frontend expects a direct array of results, but your backend was returning { artists: ... }. I changed it to return the artists array directly when searching for artists.
-    Better data mapping: I've mapped the Spotify API response to include the fields your frontend needs (id, name, image).
-
-This should fix your search functionality. The search bar should now work again and display artist results as expected. The route is backwards compatible with your existing SearchResults.jsx component while also supporting the type parameter for other potential uses.
-
-which file is this fix for
-
-This fix is for the spotify.js file in your routes folder (document index 8).
-
-You need to replace the contents of /routes/spotify.js with the updated code I provided in the artifact. This file
-
-
 import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
 import { getAccessToken, spotifyApi } from '../spotifyClient.js';
