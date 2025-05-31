@@ -16,8 +16,16 @@ router.get('/search', async (req, res) => {
 
     const result = await spotifyApi.search(q, [type]);
 
-    // Standardize shape for frontend
-    res.json({ artists: result.body.artists });
+    // Standardize shape based on type
+    if (type === 'artist') {
+      return res.json({ artists: result.body.artists });
+    }
+
+    if (type === 'track') {
+      return res.json({ tracks: result.body.tracks });
+    }
+
+    res.status(400).json({ error: 'Unsupported type' });
   } catch (err) {
     console.error('Spotify search failed:', err);
     res.status(500).json({ error: 'Failed to search Spotify' });
