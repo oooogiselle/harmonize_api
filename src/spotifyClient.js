@@ -1,24 +1,25 @@
-
 import SpotifyWebApi from 'spotify-web-api-node';
 
-let cachedToken     = null;
-let tokenExpiresAt  = 0;
+/* ───── singleton client ───── */
+const spotifyApi = new SpotifyWebApi({
+  clientId:     process.env.SPOTIFY_CLIENT_ID,
+  clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+});
 
-
-export async function getSpotifyClient() {
-  const spotify = new SpotifyWebApi({
-    clientId:     process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-  });
-
-  const now = Date.now();
-
-  if (!cachedToken || now >= tokenExpiresAt) {
-    const { body } = await spotify.clientCredentialsGrant();
-    cachedToken    = body.access_token;
-    tokenExpiresAt = now + (body.expires_in * 1000) - 60_000; // renew 1 min early
-  }
-
-  spotify.setAccessToken(cachedToken);
-  return spotify;
+/* ───── get an app‑only access‑token (client‑credentials flow) ───── */
+export async function getAccessToken() {
+  const data = await spotifyApi.clientCredentialsGrant();
+  return data.body.access_token;          // expires in ~3600 s
 }
+
+/* ───── helper that returns a ready‑to‑use client ─────
+   - refreshes the access‑token if needed
+   - returns the shared spotifyApi instance                */
+export async function getSpotifyClient() {
+  const token = await getAccessToken();
+  spotifyApi.setAccessToken(token);
+  return spotifyApi;
+}
+
+/* default/common export in case other files import it directly */
+export { spotifyApi };

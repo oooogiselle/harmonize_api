@@ -9,6 +9,7 @@ import spotifyRoutes from './routes/spotify.js';   // /refresh
 import artistRoutes  from './routes/artists.js';   // /artists/*
 import eventRoutes   from './routes/events.js';    // /events/*
 import meRoutes      from './routes/me.js';        // /api/me
+import tilesRoutes from './routes/tiles.js';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.use('/spotify',   spotifyRoutes);   // /spotify/refresh
 app.use('/artists',   artistRoutes);    // /artists/*
 app.use('/events',    eventRoutes);     // /events/*
 app.use('/',          meRoutes);        // /api/me
+app.use('/api/tiles', tilesRoutes);
 
 /* ───────── DB connection ───────── */
 mongoose.connect(MONGO_URI)
