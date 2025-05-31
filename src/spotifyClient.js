@@ -1,25 +1,55 @@
 import SpotifyWebApi from 'spotify-web-api-node';
+import User from './models/User.js';
 
-/* ───── singleton client ───── */
+/* ───── add this helper ───── */
+async function getAccessToken() {
+  const client = new SpotifyWebApi({
+    clientId:     process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
+
+  const { body } = await client.clientCredentialsGrant();
+  return body.access_token;
+}
+
+/* ───── singleton client (app credentials) ───── */
 const spotifyApi = new SpotifyWebApi({
   clientId:     process.env.SPOTIFY_CLIENT_ID,
   clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
 });
 
-/* ───── get an app‑only access‑token (client‑credentials flow) ───── */
-export async function getAccessToken() {
-  const data = await spotifyApi.clientCredentialsGrant();
-  return data.body.access_token;          // expires in ~3600 s
-}
-
-/* ───── helper that returns a ready‑to‑use client ─────
-   - refreshes the access‑token if needed
-   - returns the shared spotifyApi instance                */
 export async function getSpotifyClient() {
-  const token = await getAccessToken();
+  const token = await getAccessToken();         // now works
   spotifyApi.setAccessToken(token);
   return spotifyApi;
 }
 
-/* default/common export in case other files import it directly */
+/* ───── per-user client with token refresh ───── */
+export async function getUserSpotifyClient(user) {
+  const client = new SpotifyWebApi({
+    clientId:     process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    redirectUri:  process.env.SPOTIFY_REDIRECT_URI,
+  });
+
+  client.setAccessToken(user.spotifyAccessToken);
+  client.setRefreshToken(user.spotifyRefreshToken);
+
+  const expired =
+    !user.spotifyTokenExpiresAt || new Date() >= user.spotifyTokenExpiresAt;
+
+  if (expired) {
+    const data = await client.refreshAccessToken();
+    client.setAccessToken(data.body.access_token);
+
+    user.spotifyAccessToken    = data.body.access_token;
+    user.spotifyTokenExpiresAt = new Date(
+      Date.now() + data.body.expires_in * 1000
+    );
+    await user.save();
+  }
+
+  return client;
+}
+
 export { spotifyApi };

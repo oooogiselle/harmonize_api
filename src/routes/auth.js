@@ -105,6 +105,9 @@ router.get('/spotify/login', (req, res) => {
       'user-read-recently-played',
       'user-read-playback-state',
       'user-modify-playback-state',
+      'playlist-read-private',
+      'user-library-read',
+      'user-read-currently-playing',
     ];
 
     const url = spotify.createAuthorizeURL(scopes, state);
