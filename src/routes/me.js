@@ -1,7 +1,7 @@
 import express from 'express';
 import User from '../models/User.js';
 import { getUserSpotifyClient } from '../spotifyClient.js';
-import mapTrack from '../utils/mapTrack.js';  // Utility function for consistent formatting
+import mapTrack from '../utils/mapTrack.js';
 
 const router = express.Router();
 
@@ -10,6 +10,9 @@ router.get('/api/me/spotify', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
+
+    if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
+      return res.status(403).json({ error: 'Spotify not connected' });
 
     const spotify = await getUserSpotifyClient(user);
 
@@ -22,14 +25,14 @@ router.get('/api/me/spotify', async (req, res) => {
 
     res.json({
       profile: profile.body,
-      top: topTracks.body.items.map(mapTrack),
-      top_artists: topArtists.body.items.map((artist) => ({
+      top: topTracks.body.items?.map(mapTrack) ?? [],
+      top_artists: topArtists.body.items?.map((artist) => ({
         id: artist.id,
         name: artist.name,
         image: artist.images?.[0]?.url ?? null,
         genres: artist.genres,
-      })),
-      recent: recent.body.items.map((i) => mapTrack(i.track)),
+      })) ?? [],
+      recent: recent.body.items?.map((i) => mapTrack(i.track)) ?? [],
     });
   } catch (err) {
     console.error('[Spotify API Error]', err.body || err.message || err);
@@ -43,17 +46,24 @@ router.get('/api/recommendations', async (req, res) => {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
 
-    const spotify = await getUserSpotifyClient(user);
+    if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
+      return res.status(403).json({ error: 'Spotify not connected' });
 
+    const spotify = await getUserSpotifyClient(user);
     const top = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
+
+    if (!top.body.items || top.body.items.length === 0) {
+      return res.json([]); // Return empty array gracefully
+    }
+
     const rec = await spotify.getRecommendations({
       seed_artists: top.body.items.map((a) => a.id),
       limit: 20,
     });
 
-    res.json(rec.body.tracks.map(mapTrack));
+    res.json(rec.body.tracks?.map(mapTrack) ?? []);
   } catch (err) {
-    console.error('recommendations error', err);
+    console.error('recommendations error', err.body || err.message || err);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
@@ -64,12 +74,15 @@ router.get('/api/recent', async (req, res) => {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
 
+    if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
+      return res.status(403).json({ error: 'Spotify not connected' });
+
     const spotify = await getUserSpotifyClient(user);
     const recent = await spotify.getMyRecentlyPlayedTracks({ limit: 20 });
 
-    res.json(recent.body.items.map((i) => mapTrack(i.track)));
+    res.json(recent.body.items?.map((i) => mapTrack(i.track)) ?? []);
   } catch (err) {
-    console.error('recent error', err);
+    console.error('recent error', err.body || err.message || err);
     res.status(500).json({ error: 'Failed to fetch recently-played tracks' });
   }
 });
@@ -97,7 +110,7 @@ router.get('/api/friends/activity', async (req, res) => {
 
     res.json(placeholderActivity);
   } catch (err) {
-    console.error('friend activity placeholder error', err);
+    console.error('friend activity placeholder error', err.body || err.message || err);
     res.status(500).json({ error: 'Could not fetch friend activity' });
   }
 });

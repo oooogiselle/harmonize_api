@@ -1,4 +1,15 @@
 export default function mapTrack(track) {
+  if (!track || !track.album || !track.artists) {
+    return {
+      id: track?.id ?? 'unknown',
+      name: track?.name ?? 'Unknown Title',
+      artists: ['Unknown Artist'],
+      album: 'Unknown Album',
+      image: null,
+      preview: null,
+    };
+  }
+
   return {
     id: track.id,
     name: track.name,
