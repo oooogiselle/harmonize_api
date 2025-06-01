@@ -1,60 +1,15 @@
 import express from 'express';
 import User from '../models/User.js';
 import { getUserSpotifyClient } from '../spotifyClient.js';
-import { refreshAccessTokenForUser } from '../utils/refreshToken.js';
+import mapTrack from '../utils/mapTrack.js';  // Utility function for consistent formatting
 
 const router = express.Router();
 
-/* ───────── helpers ───────── */
-const mapTrack = (track) => ({
-  id: track.id,
-  name: track.name,
-  artists: track.artists.map((a) => a.name),
-  album: track.album.name,
-  image: track.album.images?.[0]?.url || null,
-  preview: track.preview_url,
-});
-
-/* ───────── user profile ───────── */
-router.get('/api/me', async (req, res) => {
-  const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ error: 'Not logged in' });
-
-  try {
-    const user = await User.findById(userId).select('-password');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    console.error('Failed to get user info', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.patch('/api/me', async (req, res) => {
-  const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ error: 'Not logged in' });
-
-  const { displayName, bio, avatar } = req.body;
-
-  try {
-    const updated = await User.findByIdAndUpdate(
-      userId,
-      { displayName, bio, avatar },
-      { new: true, runValidators: true }
-    ).select('-password');
-    res.json(updated);
-  } catch (err) {
-    console.error('Failed to update profile', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* ───────── Spotify Profile & Stats ───────── */
+/* ───────── GET /api/me/spotify – Profile, Top Songs, Top Artists, Recently Played ───────── */
 router.get('/api/me/spotify', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
-    if (!user || !user.spotifyAccessToken)
-      return res.status(403).json({ error: 'Spotify not connected' });
+    if (!user) return res.status(401).json({ error: 'Not logged in' });
 
     const spotify = await getUserSpotifyClient(user);
 
@@ -67,9 +22,14 @@ router.get('/api/me/spotify', async (req, res) => {
 
     res.json({
       profile: profile.body,
-      top: topTracks.body.items,
-      top_artists: topArtists.body.items,
-      recent: recent.body.items,
+      top: topTracks.body.items.map(mapTrack),
+      top_artists: topArtists.body.items.map((artist) => ({
+        id: artist.id,
+        name: artist.name,
+        image: artist.images?.[0]?.url ?? null,
+        genres: artist.genres,
+      })),
+      recent: recent.body.items.map((i) => mapTrack(i.track)),
     });
   } catch (err) {
     console.error('[Spotify API Error]', err.body || err.message || err);
@@ -77,15 +37,15 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-/* ───────── Personalized Recommendations ───────── */
+/* ───────── GET /api/recommendations – Personalized mixes ───────── */
 router.get('/api/recommendations', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
 
     const spotify = await getUserSpotifyClient(user);
-    const top = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
 
+    const top = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
     const rec = await spotify.getRecommendations({
       seed_artists: top.body.items.map((a) => a.id),
       limit: 20,
@@ -93,12 +53,12 @@ router.get('/api/recommendations', async (req, res) => {
 
     res.json(rec.body.tracks.map(mapTrack));
   } catch (err) {
-    console.error('recommendations error', err.body || err.message || err);
+    console.error('recommendations error', err);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
 
-/* ───────── Recently Played ───────── */
+/* ───────── GET /api/recent – Recently played tracks ───────── */
 router.get('/api/recent', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -109,12 +69,12 @@ router.get('/api/recent', async (req, res) => {
 
     res.json(recent.body.items.map((i) => mapTrack(i.track)));
   } catch (err) {
-    console.error('recent error', err.body || err.message || err);
+    console.error('recent error', err);
     res.status(500).json({ error: 'Failed to fetch recently-played tracks' });
   }
 });
 
-/* ───────── Friend Feed (placeholder) ───────── */
+/* ───────── GET /api/friends/activity – Placeholder version ───────── */
 router.get('/api/friends/activity', async (req, res) => {
   try {
     const me = await User.findById(req.session.userId);

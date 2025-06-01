@@ -10,7 +10,6 @@ import artistRoutes  from './routes/artists.js';   // /artists/*
 import eventRoutes   from './routes/events.js';    // /events/*
 import meRoutes      from './routes/me.js';        // /api/me
 import tilesRoutes   from './routes/tiles.js';     // /api/tiles
-import homeRoutes    from './routes/home.js';
 
 dotenv.config();
 
@@ -64,7 +63,6 @@ app.use('/artists',   artistRoutes);   // /artists/*
 app.use('/events',    eventRoutes);    // /events/*
 app.use('/',          meRoutes);       // /api/me/*
 app.use('/api/tiles', tilesRoutes);
-app.use('/',          homeRoutes);
 
 /* ───────── DB connection ───────── */
 mongoose.connect(MONGO_URI)
