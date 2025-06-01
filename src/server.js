@@ -9,7 +9,7 @@ import spotifyRoutes from './routes/spotify.js';   // /refresh
 import artistRoutes  from './routes/artists.js';   // /artists/*
 import eventRoutes   from './routes/events.js';    // /events/*
 import meRoutes      from './routes/me.js';        // /api/me
-import tilesRoutes from './routes/tiles.js';
+import tilesRoutes   from './routes/tiles.js';     // /api/tiles
 import homeRoutes    from './routes/home.js';
 
 dotenv.config();
@@ -41,19 +41,28 @@ app.use(
 /* ───────── CORS config ───────── */
 app.use(
   cors({
-    origin: ['http://127.0.0.1:5173', FRONTEND],
+    origin: [FRONTEND, 'http://127.0.0.1:5173'],
     credentials: true,
   })
 );
 
+/* ───────── Optional manual CORS headers ───────── */
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', FRONTEND);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  next();
+});
+
 app.use(express.json());
 
 /* ───────── Route setup ───────── */
-app.use('/auth',          authRoutes);      // /login, /callback, /api/me/spotify, /auth/register
-app.use('/spotify',   spotifyRoutes);   // /spotify/refresh
-app.use('/artists',   artistRoutes);    // /artists/*
-app.use('/events',    eventRoutes);     // /events/*
-app.use('/',          meRoutes);        // /api/me
+app.use('/auth',      authRoutes);     // /login, /callback, /api/me/spotify, /auth/register
+app.use('/spotify',   spotifyRoutes);  // /spotify/refresh
+app.use('/artists',   artistRoutes);   // /artists/*
+app.use('/events',    eventRoutes);    // /events/*
+app.use('/',          meRoutes);       // /api/me/*
 app.use('/api/tiles', tilesRoutes);
 app.use('/',          homeRoutes);
 
