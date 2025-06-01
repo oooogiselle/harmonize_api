@@ -19,7 +19,7 @@ const requireAuth = (req, res, next) => {
 };
 
 // POST /api/tiles — Create new tile
-router.post('/', requireAuth, async (req, res) => {
+router.post('/tiles', requireAuth, async (req, res) => {
   try {
     console.log('[POST /api/tiles] Request body:', req.body);
     console.log('[POST /api/tiles] Session userId:', req.session.userId);
@@ -52,7 +52,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // GET /api/users/:userId/tiles — Fetch all tiles for a user (with viewer permission check)
-router.get('/user/:userId', async (req, res) => {
+router.get('/users/:userId/tiles', async (req, res) => {
   try {
     const { userId } = req.params;
     const { viewerId } = req.query;
@@ -74,7 +74,7 @@ router.get('/user/:userId', async (req, res) => {
 });
 
 // GET /api/tiles/:userId — Alternative endpoint for fetching tiles
-router.get('/:userId', async (req, res) => {
+router.get('/tiles/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     console.log('[GET /api/tiles/:userId] userId:', userId);
@@ -93,7 +93,7 @@ router.get('/:userId', async (req, res) => {
 });
 
 // PATCH /api/tiles/:id — Update individual tile
-router.patch('/:id', requireAuth, async (req, res) => {
+router.patch('/tiles/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     console.log('[PATCH /api/tiles/:id] Updating tile:', id, 'with data:', req.body);
@@ -123,7 +123,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/tiles/:id — Delete tile
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/tiles/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     console.log('[DELETE /api/tiles/:id] Deleting tile:', id);
@@ -152,8 +152,8 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/tiles/bulk-layout — Bulk update tile positions
-router.patch('/bulk-layout', requireAuth, async (req, res) => {
+// PATCH /api/tiles/bulk-layout — Bulk update tile positions and sizes
+router.patch('/tiles/bulk-layout', requireAuth, async (req, res) => {
   try {
     console.log('[PATCH /api/tiles/bulk-layout] Request body:', req.body);
     const { updates } = req.body;
