@@ -113,9 +113,14 @@ app.use('/spotify',           spotifyRoutes);
 app.use('/artists',           artistRoutes);
 app.use('/events',            eventRoutes);
 app.use('/',                  meRoutes);
+app.use('/api/tiles',         tilesRoutes);
 
-// Mount tiles routes - this handles all /api/tiles/* routes including /api/users/:userId/tiles
-app.use('/api', tilesRoutes);
+// Add specific route for user tiles (this should be added to server.js)
+app.use('/api/users/:userId/tiles', (req, res, next) => {
+  // Forward to tiles route with user-specific handling
+  req.url = `/user/${req.params.userId}`;
+  tilesRoutes(req, res, next);
+});
 
 /* ───────── Error handling middleware ───────── */
 app.use((err, req, res, next) => {
