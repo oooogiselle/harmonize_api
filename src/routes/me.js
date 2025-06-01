@@ -38,4 +38,37 @@ router.patch('/api/me', async (req, res) => {
   }
 });
 
+/* ───── USER SPOTIFY DATA ───── */
+router.get('/api/me/spotify', async (req, res) => {
+  const userId = req.session.userId;
+  if (!userId) return res.status(401).json({ error: 'Not logged in' });
+
+  const user = await User.findById(userId);
+  if (!user || !user.spotifyAccessToken)
+    return res.status(403).json({ error: 'Spotify not connected' });
+
+  const spotify = buildSpotify();
+  spotify.setAccessToken(user.spotifyAccessToken);
+  spotify.setRefreshToken(user.spotifyRefreshToken);
+
+  try {
+    const [profile, topTracks, topArtists, recent] = await Promise.all([
+      spotify.getMe(),
+      spotify.getMyTopTracks({ limit: 10 }),
+      spotify.getMyTopArtists({ limit: 10 }),
+      spotify.getMyRecentlyPlayedTracks({ limit: 10 }),
+    ]);
+
+    res.json({
+      profile: profile.body,
+      top: topTracks.body.items,
+      top_artists: topArtists.body.items,
+      recent: recent.body.items,
+    });
+  } catch (err) {
+    console.error('[Spotify API Error]', err.body || err.message || err);
+    res.status(500).json({ error: 'Spotify API failed' });
+  }
+});
+
 export default router;
