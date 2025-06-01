@@ -30,9 +30,9 @@ router.get('/api/me/spotify', async (req, res) => {
         id: artist.id,
         name: artist.name,
         image: artist.images?.[0]?.url ?? null,
-        genres: artist.genres,
+        genres: artist.genres ?? [],
       })) ?? [],
-      recent: recent.body.items?.map((i) => mapTrack(i.track)) ?? [],
+      recent: recent.body.items?.map((item) => mapTrack(item.track)) ?? [],
     });
   } catch (err) {
     console.error('[Spotify API Error]', err.body || err.message || err);
@@ -53,7 +53,7 @@ router.get('/api/recommendations', async (req, res) => {
     const top = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
 
     if (!top.body.items || top.body.items.length === 0) {
-      return res.json([]); // Return empty array gracefully
+      return res.json([]);
     }
 
     const rec = await spotify.getRecommendations({
@@ -63,7 +63,7 @@ router.get('/api/recommendations', async (req, res) => {
 
     res.json(rec.body.tracks?.map(mapTrack) ?? []);
   } catch (err) {
-    console.error('recommendations error', err.body || err.message || err);
+    console.error('[Recommendations Error]', err.body || err.message || err);
     res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
@@ -80,9 +80,9 @@ router.get('/api/recent', async (req, res) => {
     const spotify = await getUserSpotifyClient(user);
     const recent = await spotify.getMyRecentlyPlayedTracks({ limit: 20 });
 
-    res.json(recent.body.items?.map((i) => mapTrack(i.track)) ?? []);
+    res.json(recent.body.items?.map((item) => mapTrack(item.track)) ?? []);
   } catch (err) {
-    console.error('recent error', err.body || err.message || err);
+    console.error('[Recently Played Error]', err.body || err.message || err);
     res.status(500).json({ error: 'Failed to fetch recently-played tracks' });
   }
 });
@@ -110,7 +110,7 @@ router.get('/api/friends/activity', async (req, res) => {
 
     res.json(placeholderActivity);
   } catch (err) {
-    console.error('friend activity placeholder error', err.body || err.message || err);
+    console.error('[Friend Activity Error]', err.body || err.message || err);
     res.status(500).json({ error: 'Could not fetch friend activity' });
   }
 });
