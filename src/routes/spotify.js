@@ -21,7 +21,8 @@ router.get('/search', async (req, res) => {
       const artists = result.body.artists.items.map(artist => ({
         id: artist.id,
         name: artist.name,
-        image: artist.images?.[0]?.url || null,
+        images: artist.images, // Keep the original images array
+        image: artist.images?.[0]?.url || null, // Also provide direct image field
         genres: artist.genres,
         popularity: artist.popularity,
         followers: artist.followers?.total
@@ -37,7 +38,8 @@ router.get('/search', async (req, res) => {
         album: {
           id: track.album.id,
           name: track.album.name,
-          image: track.album.images?.[0]?.url || null
+          images: track.album.images, // Keep the original images array
+          image: track.album.images?.[0]?.url || null // Also provide direct image field
         },
         preview_url: track.preview_url,
         popularity: track.popularity
