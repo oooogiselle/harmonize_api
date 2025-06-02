@@ -51,62 +51,72 @@ router.get('/api/recommendations', async (req, res) => {
     const spotify = await getUserSpotifyClient(user);
     if (!spotify) return res.status(403).json({ error: 'Spotify authorisation failed' });
 
-    /* ---------- 1. Build seeds ---------- */
+    /* ---------- 1. Collect seeds ---------- */
     let seedArtists = [];
     let seedTracks  = [];
+    let seedGenres  = [];          // populate if artist+track fail
 
     try {
       const topA = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
-      seedArtists = topA.body.items.map((a) => a.id);
+      seedArtists = topA.body.items.map(a => a.id);
+      // collect up to 3 genres from those artists
+      seedGenres  = [...new Set(topA.body.items.flatMap(a => a.genres))].slice(0, 3);
     } catch (e) {
-      console.warn('[Spotify] top-artists failed:', e.statusCode, e.message);
+      console.warn('[Spotify] top-artists failed:', e.statusCode, JSON.stringify(e.body || e));
     }
 
     try {
       const topT = await spotify.getMyTopTracks({ limit: 10, time_range: 'medium_term' });
-      seedTracks = topT.body.items.map((t) => t.id);
+      seedTracks = topT.body.items.map(t => t.id);
     } catch (e) {
-      console.warn('[Spotify] top-tracks failed:', e.statusCode, e.message);
+      console.warn('[Spotify] top-tracks failed:', e.statusCode, JSON.stringify(e.body || e));
     }
 
-    if (seedArtists.length === 0 && seedTracks.length === 0)
-      return res.status(204).json([]); // nothing to seed yet
+    if (seedArtists.length === 0 && seedTracks.length === 0 && seedGenres.length === 0)
+      return res.status(204).json([]);     // no listening history yet
 
-    /* ---------- 2. First attempt: artist IDs ---------- */
-    const paramsA = {
-      seed_artists: seedArtists.slice(0, 5), // Spotify allows max 5 total seeds
-      limit: 20,
-    };
-
+    /* ---------- 2. Attempt 1: artists only ---------- */
     try {
-      const recA = await spotify.getRecommendations(paramsA);
+      const recA = await spotify.getRecommendations({
+        seed_artists: seedArtists.slice(0, 5),
+        market: 'from_token',
+        limit: 20,
+      });
       return res.json(recA.body.tracks.map(mapTrack));
     } catch (e) {
-      /* 404 here means the artist IDs don't work for recommendations */
-      console.warn('[Spotify] recs with artists failed:', e.statusCode, e.message);
+      console.warn('[Spotify] recs (artists) 404:', JSON.stringify(e.body || e));
     }
 
-    /* ---------- 3. Second attempt: mix of artist + track IDs ---------- */
-    const paramsB = {
-      seed_artists: seedArtists.slice(0, 3),        // keep ≤3
-      seed_tracks:  seedTracks.slice(0, 5),         // fill the rest
-      limit: 20,
-    };
-
+    /* ---------- 3. Attempt 2: mix of artists + tracks ---------- */
     try {
-      const recB = await spotify.getRecommendations(paramsB);
+      const recB = await spotify.getRecommendations({
+        seed_artists: seedArtists.slice(0, 3),
+        seed_tracks : seedTracks.slice(0, 5),
+        market: 'from_token',
+        limit: 20,
+      });
       return res.json(recB.body.tracks.map(mapTrack));
     } catch (e) {
-      console.error('[Spotify] recs with tracks failed:', e.statusCode, e.message);
-      return res.status(204).json([]);              // still no luck—tell client “none yet”
+      console.warn('[Spotify] recs (artists+tracks) 404:', JSON.stringify(e.body || e));
+    }
+
+    /* ---------- 4. Attempt 3: genres only (guaranteed to work) ---------- */
+    try {
+      const recC = await spotify.getRecommendations({
+        seed_genres: (seedGenres.length ? seedGenres : ['pop']).slice(0, 5),
+        market: 'from_token',
+        limit: 20,
+      });
+      return res.json(recC.body.tracks.map(mapTrack));
+    } catch (e) {
+      console.error('[Spotify] recs (genres) failed:', JSON.stringify(e.body || e));
+      return res.status(204).json([]);      // still nothing – let frontend show placeholder
     }
   } catch (err) {
     console.error('[Recommendations Route Error]', err);
     return res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
-
-
 
 
 /* ───────── GET /api/recent – Recently played tracks ───────── */
