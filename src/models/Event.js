@@ -16,7 +16,8 @@ const eventSchema = new Schema({
     }
   },
   date: { type: Date, required: true },
-  description: String
+  description: String,
+  ticketUrl: String,
 }, { timestamps: true });
 
 eventSchema.index({ location: '2dsphere' });
