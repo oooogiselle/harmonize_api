@@ -15,18 +15,66 @@ const MAX_SEEDS = 5;
 function trimSeeds({ artists = [], tracks = [], genres = [] }) {
   if (!artists.length && !tracks.length && !genres.length) return null;
 
-  let remaining = MAX_SEEDS;
-  const take    = (arr) => arr.splice(0, Math.min(arr.length, remaining));
-  const pickedArtists = take([...artists]);
-  remaining -= pickedArtists.length;
-  const pickedTracks  = take([...tracks]);
-  remaining -= pickedTracks.length;
-  const pickedGenres  = take([...genres]);
+  // Try to distribute seeds evenly across types
+  const totalTypes = [artists, tracks, genres].filter(arr => arr.length > 0).length;
+  const seedsPerType = Math.floor(MAX_SEEDS / totalTypes);
+  const remainder = MAX_SEEDS % totalTypes;
+
+  let pickedArtists = [];
+  let pickedTracks = [];
+  let pickedGenres = [];
+  let extraSeeds = remainder;
+
+  // Distribute evenly first
+  if (artists.length > 0) {
+    const take = Math.min(seedsPerType + (extraSeeds > 0 ? 1 : 0), artists.length);
+    pickedArtists = artists.slice(0, take);
+    if (extraSeeds > 0) extraSeeds--;
+  }
+
+  if (tracks.length > 0) {
+    const take = Math.min(seedsPerType + (extraSeeds > 0 ? 1 : 0), tracks.length);
+    pickedTracks = tracks.slice(0, take);
+    if (extraSeeds > 0) extraSeeds--;
+  }
+
+  if (genres.length > 0) {
+    const take = Math.min(seedsPerType + (extraSeeds > 0 ? 1 : 0), genres.length);
+    pickedGenres = genres.slice(0, take);
+  }
+
+  // Fill remaining slots if we have space
+  const used = pickedArtists.length + pickedTracks.length + pickedGenres.length;
+  let remaining = MAX_SEEDS - used;
+
+  // Add more artists if we have room
+  if (remaining > 0 && pickedArtists.length < artists.length) {
+    const canAdd = Math.min(remaining, artists.length - pickedArtists.length);
+    pickedArtists = artists.slice(0, pickedArtists.length + canAdd);
+    remaining -= canAdd;
+  }
+
+  // Add more tracks if we have room
+  if (remaining > 0 && pickedTracks.length < tracks.length) {
+    const canAdd = Math.min(remaining, tracks.length - pickedTracks.length);
+    pickedTracks = tracks.slice(0, pickedTracks.length + canAdd);
+    remaining -= canAdd;
+  }
+
+  // Add more genres if we have room
+  if (remaining > 0 && pickedGenres.length < genres.length) {
+    const canAdd = Math.min(remaining, genres.length - pickedGenres.length);
+    pickedGenres = genres.slice(0, pickedGenres.length + canAdd);
+  }
+
+  console.log('🔧 trimSeeds distribution:');
+  console.log('  - Input: artists:', artists.length, 'tracks:', tracks.length, 'genres:', genres.length);
+  console.log('  - Output: artists:', pickedArtists.length, 'tracks:', pickedTracks.length, 'genres:', pickedGenres.length);
 
   return {
     seed_artists: pickedArtists.length ? pickedArtists : undefined,
     seed_tracks : pickedTracks.length  ? pickedTracks  : undefined,
-    seed_genres : pickedGenres.length ? pickedGenres : undefined,
+    seed_genres : pickedGenres.length  ? pickedGenres  : undefined,
     market      : 'from_token',
     limit       : 20,
   };
