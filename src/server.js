@@ -13,6 +13,8 @@ import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
 import meRoutes      from './routes/me.js';
 import genreRoutes   from './routes/genres.js';
+import searchRoutes from './routes/search.js';
+import musicPostsRoutes from './routes/musicPosts.js';
 
 dotenv.config();
 
@@ -130,6 +132,8 @@ app.use('/',                  meRoutes);
 
 app.use('/api/geocode',       geocodeRouter);
 app.use('/api/tiles',         tilesRoutes);
+app.use('/api/search',        searchRoutes);
+app.use('/api/musicPosts',    musicPostsRoutes)
 
 // Specific user tiles route handler
 app.use('/api/users/:userId/tiles', (req, res, next) => {
