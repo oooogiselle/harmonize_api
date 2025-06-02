@@ -8,6 +8,7 @@ import friendsRouter from './routes/friends.js';
 import eventRouter from './routes/events.js';
 import spotifyRoutes from './routes/spotify.js';
 import authRoutes from './routes/auth.js';
+import ticketmasterRoutes from './routes/ticketmaster.js';
 
 dotenv.config();
 
@@ -37,8 +38,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-
+app.use('/api/ticketmaster', ticketmasterRoutes);
 app.use('/api/tiles', tilesRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/friends', friendsRouter);
