@@ -114,7 +114,7 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-/* ───────── GET /api/recommendations with DEBUG LOGGING ───────── */
+/* ───────── GET /api/recommendations with ENHANCED DEBUG LOGGING ───────── */
 router.get('/api/recommendations', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -137,6 +137,12 @@ router.get('/api/recommendations', async (req, res) => {
       seedGenres  = [...new Set(topA.body.items.flatMap((a) => a.genres))];
       console.log('✅ Top artists found:', seedArtists.length);
       console.log('✅ Genres found:', seedGenres.length);
+      
+      // DEBUG: Log actual artist details
+      console.log('🎤 Artist details:');
+      topA.body.items.forEach((artist, i) => {
+        console.log(`  ${i+1}. ${artist.name} (${artist.id}) - genres: ${artist.genres.join(', ')}`);
+      });
     } catch (e) {
       console.error('❌ Top artists failed:', e.statusCode, e.message);
       console.error('Full error:', inspect(e.body ?? e));
@@ -148,6 +154,12 @@ router.get('/api/recommendations', async (req, res) => {
       const topT = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
       seedTracks = topT.body.items.map((t) => t.id);
       console.log('✅ Top tracks found:', seedTracks.length);
+      
+      // DEBUG: Log actual track details
+      console.log('🎶 Track details:');
+      topT.body.items.forEach((track, i) => {
+        console.log(`  ${i+1}. ${track.name} by ${track.artists.map(a => a.name).join(', ')} (${track.id})`);
+      });
     } catch (e) {
       console.error('❌ Top tracks failed:', e.statusCode, e.message);
       console.error('Full error:', inspect(e.body ?? e));
@@ -169,8 +181,49 @@ router.get('/api/recommendations', async (req, res) => {
       return res.status(204).json([]);  // nothing to recommend yet
     }
 
+    /* 1.5. Validate seeds before making API call -------------------------- */
+    console.log('🔍 Validating seed IDs...');
+    
+    // Check if artist IDs exist
+    if (baseSeeds.seed_artists && baseSeeds.seed_artists.length > 0) {
+      try {
+        console.log('🎤 Checking artist IDs:', baseSeeds.seed_artists);
+        const artistCheck = await spotify.getArtists(baseSeeds.seed_artists);
+        const validArtists = artistCheck.body.artists.filter(a => a !== null);
+        console.log(`✅ Valid artists: ${validArtists.length}/${baseSeeds.seed_artists.length}`);
+        if (validArtists.length < baseSeeds.seed_artists.length) {
+          console.log('⚠️ Some artist IDs are invalid!');
+          baseSeeds.seed_artists = validArtists.map(a => a.id);
+        }
+      } catch (e) {
+        console.error('❌ Artist validation failed:', e.statusCode, e.message);
+        // Remove artist seeds if validation fails
+        delete baseSeeds.seed_artists;
+      }
+    }
+
+    // Check if track IDs exist
+    if (baseSeeds.seed_tracks && baseSeeds.seed_tracks.length > 0) {
+      try {
+        console.log('🎶 Checking track IDs:', baseSeeds.seed_tracks);
+        const trackCheck = await spotify.getTracks(baseSeeds.seed_tracks);
+        const validTracks = trackCheck.body.tracks.filter(t => t !== null);
+        console.log(`✅ Valid tracks: ${validTracks.length}/${baseSeeds.seed_tracks.length}`);
+        if (validTracks.length < baseSeeds.seed_tracks.length) {
+          console.log('⚠️ Some track IDs are invalid!');
+          baseSeeds.seed_tracks = validTracks.map(t => t.id);
+        }
+      } catch (e) {
+        console.error('❌ Track validation failed:', e.statusCode, e.message);
+        // Remove track seeds if validation fails
+        delete baseSeeds.seed_tracks;
+      }
+    }
+
+    console.log('🔧 Validated seeds:', baseSeeds);
+
     /* 2. main recommendation call ---------------------------------------- */
-    console.log('🎯 Making recommendation call with seeds:', baseSeeds);
+    console.log('🎯 Making recommendation call with validated seeds:', baseSeeds);
     try {
       const rec = await spotify.getRecommendations(baseSeeds);
       console.log('✅ Recommendations success! Found:', rec.body.tracks.length, 'tracks');
@@ -178,30 +231,56 @@ router.get('/api/recommendations', async (req, res) => {
     } catch (e) {
       console.error('❌ Recs attempt 1 failed:', e.statusCode, e.message);
       console.error('Error body:', JSON.stringify(e.body, null, 2));
-      console.error('Error headers:', e.headers);
-      console.error('Full error object keys:', Object.keys(e));
       
-      // Let's also log the exact URL being called
-      console.error('Request details - statusCode:', e.statusCode);
-      console.error('Request details - message:', e.message);
+      // Log the actual request URL if possible
+      if (e.request) {
+        console.error('Request URL:', e.request.uri || 'N/A');
+        console.error('Request method:', e.request.method || 'N/A');
+      }
+      
+      // Try to get more details about the error
+      if (e.body && e.body.error) {
+        console.error('Spotify error details:', e.body.error);
+      }
     }
 
-    /* 3. fallback: random genre seeds ------------------------------------ */
-    console.log('🔄 Trying fallback with random genres...');
+    /* 3. fallback: simple genre-only seeds -------------------------------- */
+    console.log('🔄 Trying fallback with simple genre seeds...');
     try {
-      const allGenres  = (await spotify.getAvailableGenreSeeds()).body.genres;
-      console.log('📝 Available genres:', allGenres.length);
-      const genreSeeds = trimSeeds({ genres: allGenres.slice(0, 5) });
-      console.log('🎲 Using genre seeds:', genreSeeds);
-      const rec        = await spotify.getRecommendations(genreSeeds);
-      console.log('✅ Fallback success! Found:', rec.body.tracks.length, 'tracks');
+      // Use just a few common genres that should definitely exist
+      const simpleGenres = ['pop', 'rock', 'hip-hop'];
+      const genreSeeds = { 
+        seed_genres: simpleGenres.slice(0, 2), // Just use 2 genres
+        market: 'from_token',
+        limit: 20 
+      };
+      console.log('🎲 Using simple genre seeds:', genreSeeds);
+      const rec = await spotify.getRecommendations(genreSeeds);
+      console.log('✅ Simple fallback success! Found:', rec.body.tracks.length, 'tracks');
       return res.json(rec.body.tracks.map(mapTrack));
     } catch (e) {
-      console.error('❌ Fallback failed:', e.statusCode, e.message);
-      console.error('Fallback error body:', JSON.stringify(e.body, null, 2));
-      console.error('Fallback error headers:', e.headers);
-      console.error('Fallback full error object keys:', Object.keys(e));
-      return res.status(204).json([]);
+      console.error('❌ Simple fallback failed:', e.statusCode, e.message);
+      console.error('Simple fallback error body:', JSON.stringify(e.body, null, 2));
+    }
+
+    /* 4. last resort: get available genres and use those ----------------- */
+    console.log('🔄 Trying last resort with Spotify\'s available genres...');
+    try {
+      const allGenres = await spotify.getAvailableGenreSeeds();
+      console.log('📝 Available genres:', allGenres.body.genres.length);
+      const genreSeeds = { 
+        seed_genres: allGenres.body.genres.slice(0, 2), // Just use first 2 available genres
+        market: 'from_token',
+        limit: 20 
+      };
+      console.log('🎲 Using available genre seeds:', genreSeeds);
+      const rec = await spotify.getRecommendations(genreSeeds);
+      console.log('✅ Last resort success! Found:', rec.body.tracks.length, 'tracks');
+      return res.json(rec.body.tracks.map(mapTrack));
+    } catch (e) {
+      console.error('❌ Last resort failed:', e.statusCode, e.message);
+      console.error('Last resort error body:', JSON.stringify(e.body, null, 2));
+      return res.status(500).json({ error: 'All recommendation attempts failed' });
     }
   } catch (error) {
     console.error('❌ Outer catch - unexpected error:', error);
