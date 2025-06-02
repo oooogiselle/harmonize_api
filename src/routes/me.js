@@ -45,38 +45,53 @@ router.get('/api/recommendations', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
-
     if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
       return res.status(403).json({ error: 'Spotify not connected' });
 
     const spotify = await getUserSpotifyClient(user);
+    if (!spotify) return res.status(403).json({ error: 'Spotify authorisation failed' });
 
-    // Try to get top artists
-    const topArtists = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
-    let seedArtists = topArtists.body.items.map(a => a.id);
-
-    // Fallback to top tracks' artist IDs if no top artists
-    if (seedArtists.length === 0) {
-      const topTracks = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
-      seedArtists = topTracks.body.items.flatMap(t => t.artists.map(a => a.id));
-      seedArtists = [...new Set(seedArtists)].slice(0, 5); // dedupe & limit
+    /* 1️⃣  Try top artists */
+    let seedArtists = [];
+    try {
+      const topA = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
+      seedArtists = topA.body.items.map(a => a.id);
+    } catch (e) {
+      console.warn('[Spotify] getMyTopArtists failed:', e.statusCode, e.message);
+      if (e.statusCode === 401 || e.statusCode === 403)
+        return res.status(403).json({ error: 'Spotify authorisation failed' });
     }
 
+    /* 2️⃣  Fallback → top tracks */
     if (seedArtists.length === 0) {
-      return res.status(204).json([]);  // No seeding possible
+      try {
+        const topT = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
+        seedArtists = [
+          ...new Set(topT.body.items.flatMap(t => t.artists.map(a => a.id)))
+        ].slice(0, 5);
+      } catch (e) {
+        console.warn('[Spotify] getMyTopTracks failed:', e.statusCode, e.message);
+      }
     }
 
-    const rec = await spotify.getRecommendations({
-      seed_artists: seedArtists,
-      limit: 20,
-    });
+    if (seedArtists.length === 0) return res.status(204).json([]); // nothing to seed
 
-    res.json(rec.body.tracks?.map(mapTrack) ?? []);
+    /* 3️⃣  Fetch recs */
+    let rec;
+    try {
+      rec = await spotify.getRecommendations({ seed_artists: seedArtists, limit: 20 });
+    } catch (e) {
+      console.error('[Spotify] getRecommendations failed:', e.statusCode, e.message);
+      return res.status(204).json([]); // Spotify sometimes 400s if it can’t create recs
+    }
+
+    return res.json(rec.body.tracks.map(mapTrack));
   } catch (err) {
-    console.error('[Recommendations Error]', err.body || err.message || err);
-    res.status(500).json({ error: 'Failed to fetch recommendations' });
+    console.error('[Recommendations Route Error]', err);
+    return res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
+
 
 
 /* ───────── GET /api/recent – Recently played tracks ───────── */
