@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -16,7 +17,6 @@ import genreRoutes   from './routes/genres.js';
 import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
 
-dotenv.config();
 
 const {
   PORT = 8080,
@@ -45,6 +45,21 @@ const allowedOrigins = [
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true); // Allow non-browser requests
+/* ───────── CORS config (MOVED BEFORE SESSION) ───────── */
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://127.0.0.1:5173',
+      'http://localhost:5173', 
+      'http://localhost:3000',
+      'http://localhost:5174',
+      'https://localhost:8080',
+      FRONTEND
+    ];
+    
     if (allowedOrigins.includes(origin) || !isProduction) {
       callback(null, true);
     } else {
