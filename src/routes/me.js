@@ -43,6 +43,7 @@ router.get('/api/me/spotify', async (req, res) => {
 /* ───────── GET /api/recommendations – Personalized mixes ───────── */
 router.get('/api/recommendations', async (req, res) => {
   try {
+    /* ── Auth checks ───────────────────────────────────────────── */
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
     if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
@@ -52,7 +53,7 @@ router.get('/api/recommendations', async (req, res) => {
     if (!spotify)
       return res.status(403).json({ error: 'Spotify authorisation failed' });
 
-    /* ---------- 1. Collect seeds ---------- */
+    /* ── 1. Collect seed IDs & genres ──────────────────────────── */
     let seedArtists = [];
     let seedTracks  = [];
     let seedGenres  = [];
@@ -74,10 +75,12 @@ router.get('/api/recommendations', async (req, res) => {
                    e.statusCode, JSON.stringify(e.body || e));
     }
 
-    if (seedArtists.length === 0 && seedTracks.length === 0 && seedGenres.length === 0)
-      return res.status(204).json([]); // nothing to go on yet
+    if (seedArtists.length === 0 &&
+        seedTracks.length  === 0 &&
+        seedGenres.length  === 0)
+      return res.status(204).json([]); // brand-new account – nothing to go on
 
-    /* ---------- 2. Attempt: artists only ---------- */
+    /* ── 2. Attempt: artists only ──────────────────────────────── */
     try {
       const recA = await spotify.getRecommendations({
         seed_artists: seedArtists.slice(0, 5),
@@ -90,7 +93,7 @@ router.get('/api/recommendations', async (req, res) => {
                    JSON.stringify(e.body || e));
     }
 
-    /* ---------- 3. Attempt: artists + tracks ---------- */
+    /* ── 3. Attempt: artists + tracks ──────────────────────────── */
     try {
       const recB = await spotify.getRecommendations({
         seed_artists: seedArtists.slice(0, 3),
@@ -104,7 +107,7 @@ router.get('/api/recommendations', async (req, res) => {
                    JSON.stringify(e.body || e));
     }
 
-    /* ---------- 4. Attempt: given genres ---------- */
+    /* ── 4. Attempt: user genres ───────────────────────────────── */
     try {
       const recC = await spotify.getRecommendations({
         seed_genres: (seedGenres.length ? seedGenres : ['pop']).slice(0, 5),
@@ -113,14 +116,14 @@ router.get('/api/recommendations', async (req, res) => {
       });
       return res.json(recC.body.tracks.map(mapTrack));
     } catch (e) {
-      console.warn('[Spotify] recs (genres) 404:',
+      console.warn('[Spotify] recs (user genres) 404:',
                    JSON.stringify(e.body || e));
     }
 
-    /* ---------- 5. Final fallback: any available genre ---------- */
+    /* ── 5. Attempt: available genres for this market ──────────── */
     try {
-      const genreSeedRes   = await spotify.getAvailableGenreSeeds();
-      const fallbackGenres = genreSeedRes.body.genres.slice(0, 5); // always valid
+      const seedRes       = await spotify.getAvailableGenreSeeds();
+      const fallbackGenres = seedRes.body.genres.slice(0, 5);
       const recD = await spotify.getRecommendations({
         seed_genres: fallbackGenres,
         market: 'from_token',
@@ -128,9 +131,22 @@ router.get('/api/recommendations', async (req, res) => {
       });
       return res.json(recD.body.tracks.map(mapTrack));
     } catch (e) {
-      console.error('[Spotify] recs (fallback genres) failed:',
+      console.warn('[Spotify] recs (market genres) 404:',
+                   JSON.stringify(e.body || e));
+    }
+
+    /* ── 6. Ultimate fallback: US market + “pop” ───────────────── */
+    try {
+      const recE = await spotify.getRecommendations({
+        seed_genres: ['pop'],
+        market: 'US',
+        limit: 20,
+      });
+      return res.json(recE.body.tracks.map(mapTrack));
+    } catch (e) {
+      console.error('[Spotify] recs (US pop) failed:',
                     JSON.stringify(e.body || e));
-      return res.status(204).json([]); // still nothing – frontend shows placeholder
+      return res.status(204).json([]); // nothing left to try
     }
   } catch (err) {
     console.error('[Recommendations Route Error]', err);
