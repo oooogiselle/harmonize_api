@@ -9,6 +9,8 @@ import eventRouter from './routes/events.js';
 import spotifyRoutes from './routes/spotify.js';
 import authRoutes from './routes/auth.js';
 import ticketmasterRoutes from './routes/ticketmaster.js';
+import geocodeRouter from './routes/geocode.js';
+
 
 dotenv.config();
 
@@ -31,6 +33,7 @@ app.use(
 app.use(cors({
   origin: [
     'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
     'http://localhost:5173',
     'https://project-music-and-memories.onrender.com',
   ],
@@ -45,6 +48,7 @@ app.use('/api/friends', friendsRouter);
 app.use('/api/events', eventRouter)
 app.use('/auth', authRoutes);
 app.use('/auth', spotifyRoutes);
+app.use('/api/geocode', geocodeRouter);
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✓ MongoDB connected'))
