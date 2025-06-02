@@ -50,14 +50,24 @@ router.get('/api/recommendations', async (req, res) => {
       return res.status(403).json({ error: 'Spotify not connected' });
 
     const spotify = await getUserSpotifyClient(user);
-    const top = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
 
-    if (!top.body.items || top.body.items.length === 0) {
-      return res.json([]);
+    // Try to get top artists
+    const topArtists = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
+    let seedArtists = topArtists.body.items.map(a => a.id);
+
+    // Fallback to top tracks' artist IDs if no top artists
+    if (seedArtists.length === 0) {
+      const topTracks = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
+      seedArtists = topTracks.body.items.flatMap(t => t.artists.map(a => a.id));
+      seedArtists = [...new Set(seedArtists)].slice(0, 5); // dedupe & limit
+    }
+
+    if (seedArtists.length === 0) {
+      return res.status(204).json([]);  // No seeding possible
     }
 
     const rec = await spotify.getRecommendations({
-      seed_artists: top.body.items.map((a) => a.id),
+      seed_artists: seedArtists,
       limit: 20,
     });
 
@@ -67,6 +77,7 @@ router.get('/api/recommendations', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
+
 
 /* ───────── GET /api/recent – Recently played tracks ───────── */
 router.get('/api/recent', async (req, res) => {
