@@ -140,50 +140,39 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
     const { updates } = req.body;
     const currentUserId = req.session.userId;
 
-    console.log('[TILES] Bulk layout update - raw:', updates?.length);
+    console.log('[TILES] Bulk layout update:', updates?.length, 'tiles');
 
     if (!Array.isArray(updates)) {
       return res.status(400).json({ error: 'Updates must be an array' });
     }
 
-    // Allow only layout-relevant fields
-    const allowedKeys = new Set(['_id', 'id', 'x', 'y', 'w', 'h']);
-    const sanitizedUpdates = updates.map(tile => {
-      const clean = {};
-      for (const key of Object.keys(tile)) {
-        if (allowedKeys.has(key)) {
-          clean[key] = tile[key];
-        }
-      }
-      return clean;
-    });
-
     const results = [];
-
-    for (const update of sanitizedUpdates) {
-      const id = update._id || update.id;
-      const { x, y, w, h } = update;
-
-      if (!isValidObjectId(id)) {
-        console.warn('[TILES] Skipping invalid tile ID:', id);
+    
+    for (const update of updates) {
+      const { _id, x, y, w, h } = update;
+      
+      if (!isValidObjectId(_id)) {
+        console.warn('[TILES] Skipping invalid tile ID:', _id);
         continue;
       }
 
       try {
-        const tile = await Tile.findById(id);
+        // Verify ownership
+        const tile = await Tile.findById(_id);
         if (!tile || tile.userId.toString() !== currentUserId) {
-          console.warn('[TILES] Skipping tile not owned by user:', id);
+          console.warn('[TILES] Skipping tile not owned by user:', _id);
           continue;
         }
 
+        // Update layout
         const updatedTile = await Tile.findByIdAndUpdate(
-          id,
-          {
-            x: Number(x),
-            y: Number(y),
-            w: Number(w),
+          _id,
+          { 
+            x: Number(x), 
+            y: Number(y), 
+            w: Number(w), 
             h: Number(h),
-            updatedAt: new Date(),
+            updatedAt: new Date()
           },
           { new: true }
         );
@@ -192,7 +181,7 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
           results.push(updatedTile);
         }
       } catch (err) {
-        console.error('[TILES] Error updating tile in bulk:', id, err);
+        console.error('[TILES] Error updating tile in bulk:', _id, err);
       }
     }
 
