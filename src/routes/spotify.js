@@ -22,14 +22,12 @@ router.get('/search', async (req, res) => {
         id: artist.id,
         name: artist.name,
         image: artist.images?.[0]?.url || null,
-        images: artist.images || [],  // 👈 add this line
         genres: artist.genres,
         popularity: artist.popularity,
         followers: artist.followers?.total
       }));
-      return res.json(artists);
+      return res.json(artists); // Return array directly for SearchResults.jsx
     }
-    
 
     if (type === 'track') {
       const tracks = result.body.tracks.items.map(track => ({
