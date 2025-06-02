@@ -49,17 +49,17 @@ router.get('/api/recommendations', async (req, res) => {
       return res.status(403).json({ error: 'Spotify not connected' });
 
     const spotify = await getUserSpotifyClient(user);
-    if (!spotify)
-      return res.status(403).json({ error: 'Spotify authorisation failed' });
+    if (!spotify) return res.status(403).json({ error: 'Spotify authorisation failed' });
 
     /* ---------- 1. Collect seeds ---------- */
     let seedArtists = [];
     let seedTracks  = [];
-    let seedGenres  = [];
+    let seedGenres  = [];          // populate if artist+track fail
 
     try {
       const topA = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
       seedArtists = topA.body.items.map(a => a.id);
+      // collect up to 3 genres from those artists
       seedGenres  = [...new Set(topA.body.items.flatMap(a => a.genres))].slice(0, 3);
     } catch (e) {
       console.warn('[Spotify] top-artists failed:', e.statusCode, JSON.stringify(e.body || e));
@@ -73,9 +73,9 @@ router.get('/api/recommendations', async (req, res) => {
     }
 
     if (seedArtists.length === 0 && seedTracks.length === 0 && seedGenres.length === 0)
-      return res.status(204).json([]); // no listening data yet
+      return res.status(204).json([]);     // no listening history yet
 
-    /* ---------- 2. Attempt: artists only ---------- */
+    /* ---------- 2. Attempt 1: artists only ---------- */
     try {
       const recA = await spotify.getRecommendations({
         seed_artists: seedArtists.slice(0, 5),
@@ -87,7 +87,7 @@ router.get('/api/recommendations', async (req, res) => {
       console.warn('[Spotify] recs (artists) 404:', JSON.stringify(e.body || e));
     }
 
-    /* ---------- 3. Attempt: artists + tracks ---------- */
+    /* ---------- 3. Attempt 2: mix of artists + tracks ---------- */
     try {
       const recB = await spotify.getRecommendations({
         seed_artists: seedArtists.slice(0, 3),
@@ -100,7 +100,7 @@ router.get('/api/recommendations', async (req, res) => {
       console.warn('[Spotify] recs (artists+tracks) 404:', JSON.stringify(e.body || e));
     }
 
-    /* ---------- 4. Attempt: given genres ---------- */
+    /* ---------- 4. Attempt 3: genres only (guaranteed to work) ---------- */
     try {
       const recC = await spotify.getRecommendations({
         seed_genres: (seedGenres.length ? seedGenres : ['pop']).slice(0, 5),
@@ -109,27 +109,32 @@ router.get('/api/recommendations', async (req, res) => {
       });
       return res.json(recC.body.tracks.map(mapTrack));
     } catch (e) {
-      console.warn('[Spotify] recs (genres) 404:', JSON.stringify(e.body || e));
-    }
-
-    /* ---------- 5. Final fallback: any available genre ---------- */
-    try {
-      const genreSeedRes  = await spotify.getAvailableGenreSeeds();
-      const fallbackGenres = genreSeedRes.body.genres.slice(0, 5);      // guaranteed valid
-      const recD = await spotify.getRecommendations({
-        seed_genres: fallbackGenres,
-        market: 'from_token',
-        limit: 20,
-      });
-      return res.json(recD.body.tracks.map(mapTrack));
-    } catch (e) {
-      console.error('[Spotify] recs (fallback genres) failed:',
-                    JSON.stringify(e.body || e));
-      return res.status(204).json([]); // still nothing – frontend shows placeholder
+      console.error('[Spotify] recs (genres) failed:', JSON.stringify(e.body || e));
+      return res.status(204).json([]);      // still nothing – let frontend show placeholder
     }
   } catch (err) {
     console.error('[Recommendations Route Error]', err);
     return res.status(500).json({ error: 'Failed to fetch recommendations' });
+  }
+});
+
+
+/* ───────── GET /api/recent – Recently played tracks ───────── */
+router.get('/api/recent', async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Not logged in' });
+
+    if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
+      return res.status(403).json({ error: 'Spotify not connected' });
+
+    const spotify = await getUserSpotifyClient(user);
+    const recent = await spotify.getMyRecentlyPlayedTracks({ limit: 20 });
+
+    res.json(recent.body.items?.map((item) => mapTrack(item.track)) ?? []);
+  } catch (err) {
+    console.error('[Recently Played Error]', err.body || err.message || err);
+    res.status(500).json({ error: 'Failed to fetch recently-played tracks' });
   }
 });
 
