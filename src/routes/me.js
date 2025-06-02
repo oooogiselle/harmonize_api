@@ -51,46 +51,61 @@ router.get('/api/recommendations', async (req, res) => {
     const spotify = await getUserSpotifyClient(user);
     if (!spotify) return res.status(403).json({ error: 'Spotify authorisation failed' });
 
-    /* 1️⃣  Try top artists */
+    /* ---------- 1. Build seeds ---------- */
     let seedArtists = [];
+    let seedTracks  = [];
+
     try {
       const topA = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
-      seedArtists = topA.body.items.map(a => a.id);
+      seedArtists = topA.body.items.map((a) => a.id);
     } catch (e) {
-      console.warn('[Spotify] getMyTopArtists failed:', e.statusCode, e.message);
-      if (e.statusCode === 401 || e.statusCode === 403)
-        return res.status(403).json({ error: 'Spotify authorisation failed' });
+      console.warn('[Spotify] top-artists failed:', e.statusCode, e.message);
     }
 
-    /* 2️⃣  Fallback → top tracks */
-    if (seedArtists.length === 0) {
-      try {
-        const topT = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
-        seedArtists = [
-          ...new Set(topT.body.items.flatMap(t => t.artists.map(a => a.id)))
-        ].slice(0, 5);
-      } catch (e) {
-        console.warn('[Spotify] getMyTopTracks failed:', e.statusCode, e.message);
-      }
-    }
-
-    if (seedArtists.length === 0) return res.status(204).json([]); // nothing to seed
-
-    /* 3️⃣  Fetch recs */
-    let rec;
     try {
-      rec = await spotify.getRecommendations({ seed_artists: seedArtists, limit: 20 });
+      const topT = await spotify.getMyTopTracks({ limit: 10, time_range: 'medium_term' });
+      seedTracks = topT.body.items.map((t) => t.id);
     } catch (e) {
-      console.error('[Spotify] getRecommendations failed:', e.statusCode, e.message);
-      return res.status(204).json([]); // Spotify sometimes 400s if it can’t create recs
+      console.warn('[Spotify] top-tracks failed:', e.statusCode, e.message);
     }
 
-    return res.json(rec.body.tracks.map(mapTrack));
+    if (seedArtists.length === 0 && seedTracks.length === 0)
+      return res.status(204).json([]); // nothing to seed yet
+
+    /* ---------- 2. First attempt: artist IDs ---------- */
+    const paramsA = {
+      seed_artists: seedArtists.slice(0, 5), // Spotify allows max 5 total seeds
+      limit: 20,
+    };
+
+    try {
+      const recA = await spotify.getRecommendations(paramsA);
+      return res.json(recA.body.tracks.map(mapTrack));
+    } catch (e) {
+      /* 404 here means the artist IDs don't work for recommendations */
+      console.warn('[Spotify] recs with artists failed:', e.statusCode, e.message);
+    }
+
+    /* ---------- 3. Second attempt: mix of artist + track IDs ---------- */
+    const paramsB = {
+      seed_artists: seedArtists.slice(0, 3),        // keep ≤3
+      seed_tracks:  seedTracks.slice(0, 5),         // fill the rest
+      limit: 20,
+    };
+
+    try {
+      const recB = await spotify.getRecommendations(paramsB);
+      return res.json(recB.body.tracks.map(mapTrack));
+    } catch (e) {
+      console.error('[Spotify] recs with tracks failed:', e.statusCode, e.message);
+      return res.status(204).json([]);              // still no luck—tell client “none yet”
+    }
   } catch (err) {
     console.error('[Recommendations Route Error]', err);
     return res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
+
 
 
 
