@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import express from 'express';
 import mongoose from 'mongoose';
 import MusicPost from '../models/MusicPost.js';
 import { authenticateSpotifyUser } from '../middleware/authMiddleware.js';

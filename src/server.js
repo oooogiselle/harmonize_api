@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -13,7 +14,6 @@ import tilesRoutes from './routes/tiles.js';
 import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
 
-dotenv.config();
 
 const {
   PORT = 8080,
@@ -41,6 +41,7 @@ const corsOptions = {
       'http://localhost:5173', 
       'http://localhost:3000',
       'http://localhost:5174',
+      'https://localhost:8080',
       FRONTEND
     ];
     
