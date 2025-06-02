@@ -1,220 +1,227 @@
-// src/routes/tiles.js
 import express from 'express';
-import mongoose from 'mongoose';
 import Tile from '../models/Tile.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Helper function to validate ObjectId
-const isValidObjectId = (id) => {
-  return mongoose.Types.ObjectId.isValid(id) && (String(new mongoose.Types.ObjectId(id)) === id);
-};
+function isValidObjectId(id) {
+  return /^[0-9a-fA-F]{24}$/.test(id);
+}
 
-// Middleware to check authentication
-const requireAuth = (req, res, next) => {
-  if (!req.session?.userId) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-};
-
-// POST /api/tiles — Create new tile
-router.post('/', requireAuth, async (req, res) => {
-  try {
-    console.log('[POST /api/tiles] Request body:', req.body);
-    console.log('[POST /api/tiles] Session userId:', req.session.userId);
-    
-    // Use session userId as fallback if not provided in body
-    const userId = req.body.userId || req.session.userId;
-    
-    // Validate userId
-    if (!userId || !isValidObjectId(userId)) {
-      return res.status(400).json({ error: 'Invalid or missing userId' });
-    }
-    
-    const data = {
-      ...req.body,
-      userId: new mongoose.Types.ObjectId(userId),
-      // Ensure default values for layout
-      x: req.body.x || 0,
-      y: req.body.y || 0,
-      w: req.body.w || 1,
-      h: req.body.h || 1,
-    };
-
-    const tile = await Tile.create(data);
-    console.log('[POST /api/tiles] Created tile:', tile);
-    res.status(201).json(tile);
-  } catch (err) {
-    console.error('Tile POST error:', err.message, err.stack);
-    res.status(500).json({ error: 'Failed to create tile', details: err.message });
-  }
-});
-
-// GET /api/users/:userId/tiles — Fetch all tiles for a user (with viewer permission check)
-router.get('/user/:userId', async (req, res) => {
+/* ───────── GET /api/users/:userId/tiles - Get tiles for a specific user ───────── */
+router.get('/api/users/:userId/tiles', requireAuth, async (req, res) => {
   try {
     const { userId } = req.params;
     const { viewerId } = req.query;
-    
-    console.log('[GET /api/users/:userId/tiles] userId:', userId, 'viewerId:', viewerId);
-    
+    const currentUserId = req.session.userId;
+
+    console.log('[TILES] Fetching tiles for user:', userId, 'viewer:', viewerId, 'session:', currentUserId);
+
     if (!isValidObjectId(userId)) {
-      return res.status(400).json({ error: 'Invalid userId' });
+      return res.status(400).json({ error: 'Invalid user ID format' });
     }
+
+    // Build query - for now, get all tiles for the user
+    // TODO: Add privacy filtering based on viewerId
+    const query = { userId };
     
-    // For now, allow viewing any user's tiles (you can add privacy logic later)
-    const tiles = await Tile.find({ userId: new mongoose.Types.ObjectId(userId) }).sort({ createdAt: 1 });
-    console.log('[GET /api/users/:userId/tiles] Found tiles:', tiles.length);
+    const tiles = await Tile.find(query).sort({ createdAt: -1 });
+    
+    console.log('[TILES] Found tiles:', tiles.length);
     res.json(tiles);
   } catch (err) {
-    console.error('Tile GET error:', err);
-    res.status(500).json({ error: 'Failed to fetch tiles', details: err.message });
+    console.error('[TILES] Error fetching user tiles:', err);
+    res.status(500).json({ error: 'Failed to fetch tiles' });
   }
 });
 
-// GET /api/tiles/:userId — Alternative endpoint for fetching tiles
-router.get('/:userId', async (req, res) => {
+/* ───────── GET /api/tiles/:userId - Alternative endpoint for user tiles ───────── */
+router.get('/:userId', requireAuth, async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log('[GET /api/tiles/:userId] userId:', userId);
-    
+    const currentUserId = req.session.userId;
+
+    console.log('[TILES] Alternative endpoint - Fetching tiles for user:', userId, 'session:', currentUserId);
+
     if (!isValidObjectId(userId)) {
-      return res.status(400).json({ error: 'Invalid userId' });
+      return res.status(400).json({ error: 'Invalid user ID format' });
     }
+
+    const tiles = await Tile.find({ userId }).sort({ createdAt: -1 });
     
-    const tiles = await Tile.find({ userId: new mongoose.Types.ObjectId(userId) }).sort({ createdAt: 1 });
-    console.log('[GET /api/tiles/:userId] Found tiles:', tiles.length);
+    console.log('[TILES] Found tiles (alternative):', tiles.length);
     res.json(tiles);
   } catch (err) {
-    console.error('Tile GET error:', err);
-    res.status(500).json({ error: 'Failed to fetch tiles', details: err.message });
+    console.error('[TILES] Error fetching tiles (alternative):', err);
+    res.status(500).json({ error: 'Failed to fetch tiles' });
   }
 });
 
-// PATCH /api/tiles/:id — Update individual tile
+/* ───────── POST /api/tiles - Create new tile ───────── */
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const currentUserId = req.session.userId;
+    const { userId, type, content, x, y, w, h, title } = req.body;
+
+    console.log('[TILES] Creating tile:', { userId, type, currentUserId });
+
+    // Validate that user can create tiles for this userId
+    if (userId !== currentUserId) {
+      return res.status(403).json({ error: 'Cannot create tiles for other users' });
+    }
+
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
+
+    const tileData = {
+      userId,
+      type: type || 'text',
+      content: content || '',
+      title: title || '',
+      x: Number(x) || 0,
+      y: Number(y) || 0,
+      w: Number(w) || 1,
+      h: Number(h) || 1,
+    };
+
+    const tile = await Tile.create(tileData);
+    console.log('[TILES] Created tile:', tile._id);
+    
+    res.status(201).json(tile);
+  } catch (err) {
+    console.error('[TILES] Error creating tile:', err);
+    res.status(500).json({ error: 'Failed to create tile' });
+  }
+});
+
+/* ───────── PATCH /api/tiles/:id - Update single tile ───────── */
 router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('[PATCH /api/tiles/:id] Updating tile:', id, 'with data:', req.body);
-    
+    const currentUserId = req.session.userId;
+    const updates = req.body;
+
+    console.log('[TILES] Updating tile:', id, 'updates:', updates);
+
     if (!isValidObjectId(id)) {
-      return res.status(400).json({ error: 'Invalid tile ID' });
+      return res.status(400).json({ error: 'Invalid tile ID format' });
     }
-    
-    // Find the tile first to check ownership
-    const existingTile = await Tile.findById(id);
-    if (!existingTile) {
+
+    // Find tile and verify ownership
+    const tile = await Tile.findById(id);
+    if (!tile) {
       return res.status(404).json({ error: 'Tile not found' });
     }
-    
-    // Check if user owns this tile (optional security check)
-    if (existingTile.userId.toString() !== req.session.userId.toString()) {
-      return res.status(403).json({ error: 'Not authorized to update this tile' });
+
+    if (tile.userId.toString() !== currentUserId) {
+      return res.status(403).json({ error: 'Cannot update tiles you do not own' });
     }
-    
-    const updated = await Tile.findByIdAndUpdate(id, req.body, { new: true });
-    console.log('[PATCH /api/tiles/:id] Updated tile:', updated);
-    res.json(updated);
+
+    // Update tile
+    const updatedTile = await Tile.findByIdAndUpdate(
+      id,
+      { ...updates, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+
+    console.log('[TILES] Updated tile:', updatedTile._id);
+    res.json(updatedTile);
   } catch (err) {
-    console.error('Tile PATCH error:', err);
-    res.status(500).json({ error: 'Failed to update tile', details: err.message });
+    console.error('[TILES] Error updating tile:', err);
+    res.status(500).json({ error: 'Failed to update tile' });
   }
 });
 
-// DELETE /api/tiles/:id — Delete tile
+/* ───────── PATCH /api/tiles/bulk-layout - Update multiple tile layouts ───────── */
+router.patch('/bulk-layout', requireAuth, async (req, res) => {
+  try {
+    const { updates } = req.body;
+    const currentUserId = req.session.userId;
+
+    console.log('[TILES] Bulk layout update:', updates?.length, 'tiles');
+
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: 'Updates must be an array' });
+    }
+
+    const results = [];
+    
+    for (const update of updates) {
+      const { _id, x, y, w, h } = update;
+      
+      if (!isValidObjectId(_id)) {
+        console.warn('[TILES] Skipping invalid tile ID:', _id);
+        continue;
+      }
+
+      try {
+        // Verify ownership
+        const tile = await Tile.findById(_id);
+        if (!tile || tile.userId.toString() !== currentUserId) {
+          console.warn('[TILES] Skipping tile not owned by user:', _id);
+          continue;
+        }
+
+        // Update layout
+        const updatedTile = await Tile.findByIdAndUpdate(
+          _id,
+          { 
+            x: Number(x), 
+            y: Number(y), 
+            w: Number(w), 
+            h: Number(h),
+            updatedAt: new Date()
+          },
+          { new: true }
+        );
+
+        if (updatedTile) {
+          results.push(updatedTile);
+        }
+      } catch (err) {
+        console.error('[TILES] Error updating tile in bulk:', _id, err);
+      }
+    }
+
+    console.log('[TILES] Bulk update completed:', results.length, 'tiles updated');
+    res.json({ updated: results.length, tiles: results });
+  } catch (err) {
+    console.error('[TILES] Error in bulk layout update:', err);
+    res.status(500).json({ error: 'Failed to update tile layouts' });
+  }
+});
+
+/* ───────── DELETE /api/tiles/:id - Delete tile ───────── */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('[DELETE /api/tiles/:id] Deleting tile:', id);
-    
+    const currentUserId = req.session.userId;
+
+    console.log('[TILES] Deleting tile:', id);
+
     if (!isValidObjectId(id)) {
-      return res.status(400).json({ error: 'Invalid tile ID' });
+      return res.status(400).json({ error: 'Invalid tile ID format' });
     }
-    
-    // Find the tile first to check ownership
-    const existingTile = await Tile.findById(id);
-    if (!existingTile) {
+
+    // Find tile and verify ownership
+    const tile = await Tile.findById(id);
+    if (!tile) {
       return res.status(404).json({ error: 'Tile not found' });
     }
-    
-    // Check if user owns this tile
-    if (existingTile.userId.toString() !== req.session.userId.toString()) {
-      return res.status(403).json({ error: 'Not authorized to delete this tile' });
+
+    if (tile.userId.toString() !== currentUserId) {
+      return res.status(403).json({ error: 'Cannot delete tiles you do not own' });
     }
+
+    await Tile.findByIdAndDelete(id);
+    console.log('[TILES] Deleted tile:', id);
     
-    const deleted = await Tile.findByIdAndDelete(id);
-    console.log('[DELETE /api/tiles/:id] Deleted tile:', deleted?._id);
-    res.json({ success: true, deletedId: deleted._id });
+    res.status(204).send();
   } catch (err) {
-    console.error('Tile DELETE error:', err);
-    res.status(500).json({ error: 'Failed to delete tile', details: err.message });
-  }
-});
-
-// PATCH /api/tiles/bulk-layout — Bulk update tile positions
-router.patch('/bulk-layout', requireAuth, async (req, res) => {
-  try {
-    console.log('[PATCH /api/tiles/bulk-layout] Request body:', req.body);
-    const { updates } = req.body;
-    
-    if (!Array.isArray(updates)) {
-      return res.status(400).json({ error: 'Invalid layout update format - updates must be an array' });
-    }
-
-    // Validate all IDs before processing and ensure user owns all tiles
-    const validUpdates = [];
-    for (const update of updates) {
-      // Handle both _id and id fields
-      const tileId = update._id || update.id;
-      
-      if (!tileId || !isValidObjectId(tileId)) {
-        console.warn(`Invalid tile ID in bulk update: ${tileId}`);
-        continue;
-      }
-      
-      // Verify tile exists and user owns it
-      const tile = await Tile.findById(tileId);
-      if (!tile) {
-        console.warn(`Tile not found for ID: ${tileId}`);
-        continue;
-      }
-      
-      if (tile.userId.toString() !== req.session.userId.toString()) {
-        console.warn(`User ${req.session.userId} doesn't own tile ${tileId}`);
-        continue;
-      }
-      
-      validUpdates.push({
-        updateOne: {
-          filter: { _id: new mongoose.Types.ObjectId(tileId) },
-          update: { 
-            $set: { 
-              x: Number(update.x) || 0, 
-              y: Number(update.y) || 0, 
-              w: Number(update.w) || 1, 
-              h: Number(update.h) || 1 
-            } 
-          },
-        },
-      });
-    }
-
-    if (validUpdates.length === 0) {
-      return res.status(400).json({ error: 'No valid tile updates provided' });
-    }
-
-    const result = await Tile.bulkWrite(validUpdates);
-    console.log('[PATCH /api/tiles/bulk-layout] Bulk write result:', result);
-    
-    res.status(200).json({ 
-      message: 'Layout updated successfully',
-      updated: result.modifiedCount,
-      matched: result.matchedCount
-    });
-  } catch (err) {
-    console.error('Tile LAYOUT update error:', err);
-    res.status(500).json({ error: 'Failed to update layout', details: err.message });
+    console.error('[TILES] Error deleting tile:', err);
+    res.status(500).json({ error: 'Failed to delete tile' });
   }
 });
 

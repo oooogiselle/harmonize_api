@@ -9,7 +9,7 @@ import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
 import eventRoutes   from './routes/events.js';
 import meRoutes      from './routes/me.js';
-import tilesRoutes from './routes/tiles.js';
+import tilesRoutes   from './routes/tiles.js';
 
 dotenv.config();
 
@@ -113,14 +113,10 @@ app.use('/spotify',           spotifyRoutes);
 app.use('/artists',           artistRoutes);
 app.use('/events',            eventRoutes);
 app.use('/',                  meRoutes);
-app.use('/api/tiles',         tilesRoutes);
 
-// Add specific route for user tiles (this should be added to server.js)
-app.use('/api/users/:userId/tiles', (req, res, next) => {
-  // Forward to tiles route with user-specific handling
-  req.url = `/user/${req.params.userId}`;
-  tilesRoutes(req, res, next);
-});
+// Fix the tiles routing - this was the main issue
+app.use('/api/tiles',         tilesRoutes);
+app.use('/api/users/:userId/tiles', tilesRoutes);
 
 /* ───────── Error handling middleware ───────── */
 app.use((err, req, res, next) => {
@@ -143,7 +139,8 @@ app.use((err, req, res, next) => {
 
 /* ───────── 404 handler ───────── */
 app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+  console.log('404 - Route not found:', req.method, req.originalUrl);
+  res.status(404).json({ error: 'Route not found', path: req.originalUrl });
 });
 
 /* ───────── DB connection ───────── */
