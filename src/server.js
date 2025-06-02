@@ -10,6 +10,8 @@ import artistRoutes  from './routes/artists.js';
 import eventRoutes   from './routes/events.js';
 import meRoutes      from './routes/me.js';
 import tilesRoutes from './routes/tiles.js';
+import searchRoutes from './routes/search.js';
+import musicPostsRoutes from './routes/musicPosts.js';
 
 dotenv.config();
 
@@ -114,6 +116,8 @@ app.use('/artists',           artistRoutes);
 app.use('/events',            eventRoutes);
 app.use('/',                  meRoutes);
 app.use('/api/tiles',         tilesRoutes);
+app.use('/api/search',        searchRoutes);
+app.use('/api/musicPosts',    musicPostsRoutes)
 
 // Add specific route for user tiles (this should be added to server.js)
 app.use('/api/users/:userId/tiles', (req, res, next) => {
