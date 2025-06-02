@@ -66,7 +66,7 @@ router.get('/api/me/spotify', async (req, res) => {
   }
 });
 
-/* ───────── GET /api/recommendations ───────── */
+/* ───────── GET /api/recommendations with DEBUG LOGGING ───────── */
 router.get('/api/recommendations', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -81,42 +81,70 @@ router.get('/api/recommendations', async (req, res) => {
     let seedTracks  = [];
     let seedGenres  = [];
 
+    // DEBUG: Check if we can get top artists
+    console.log('🎵 Fetching top artists...');
     try {
       const topA = await spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
       seedArtists = topA.body.items.map((a) => a.id);
       seedGenres  = [...new Set(topA.body.items.flatMap((a) => a.genres))];
+      console.log('✅ Top artists found:', seedArtists.length);
+      console.log('✅ Genres found:', seedGenres.length);
     } catch (e) {
-      console.warn('[Spotify] top artists failed:', inspect(e.body ?? e));
+      console.error('❌ Top artists failed:', e.statusCode, e.message);
+      console.error('Full error:', inspect(e.body ?? e));
     }
 
+    // DEBUG: Check if we can get top tracks
+    console.log('🎵 Fetching top tracks...');
     try {
       const topT = await spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' });
       seedTracks = topT.body.items.map((t) => t.id);
+      console.log('✅ Top tracks found:', seedTracks.length);
     } catch (e) {
-      console.warn('[Spotify] top tracks failed:', inspect(e.body ?? e));
+      console.error('❌ Top tracks failed:', e.statusCode, e.message);
+      console.error('Full error:', inspect(e.body ?? e));
     }
 
+    // DEBUG: Log what seeds we have
+    console.log('📊 Seeds summary:');
+    console.log('  - Artists:', seedArtists.length, seedArtists.slice(0, 2));
+    console.log('  - Tracks:', seedTracks.length, seedTracks.slice(0, 2));
+    console.log('  - Genres:', seedGenres.length, seedGenres.slice(0, 5));
+
     const baseSeeds = trimSeeds({ artists: seedArtists, tracks: seedTracks, genres: seedGenres });
-    if (!baseSeeds) return res.status(204).json([]);  // nothing to recommend yet
+    
+    // DEBUG: Check what trimSeeds returned
+    console.log('🔧 Base seeds result:', baseSeeds);
+    
+    if (!baseSeeds) {
+      console.log('❌ No base seeds - returning 204');
+      return res.status(204).json([]);  // nothing to recommend yet
+    }
 
     /* 2. main recommendation call ---------------------------------------- */
+    console.log('🎯 Making recommendation call with seeds:', baseSeeds);
     try {
       const rec = await spotify.getRecommendations(baseSeeds);
+      console.log('✅ Recommendations success! Found:', rec.body.tracks.length, 'tracks');
       return res.json(rec.body.tracks.map(mapTrack));
     } catch (e) {
-      console.warn('[Spotify] recs attempt 1 failed:',
-                   e.statusCode, inspect(e.body ?? e));
+      console.error('❌ Recs attempt 1 failed:', e.statusCode, e.message);
+      console.error('Full error:', inspect(e.body ?? e));
     }
 
     /* 3. fallback: random genre seeds ------------------------------------ */
+    console.log('🔄 Trying fallback with random genres...');
     try {
       const allGenres  = (await spotify.getAvailableGenreSeeds()).body.genres;
+      console.log('📝 Available genres:', allGenres.length);
       const genreSeeds = trimSeeds({ genres: allGenres.slice(0, 5) });
+      console.log('🎲 Using genre seeds:', genreSeeds);
       const rec        = await spotify.getRecommendations(genreSeeds);
+      console.log('✅ Fallback success! Found:', rec.body.tracks.length, 'tracks');
       return res.json(rec.body.tracks.map(mapTrack));
     } catch (e) {
-      console.error('[Spotify] recs fallback failed:',
-                    e.statusCode, inspect(e.body ?? e));
+      console.error('❌ Fallback failed:', e.statusCode, e.message);
+      console.error('Full error:', inspect(e.body ?? e));
       return res.status(204).json([]);
     }
   } catch (err) {
