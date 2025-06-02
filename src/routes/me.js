@@ -177,7 +177,13 @@ router.get('/api/recommendations', async (req, res) => {
       return res.json(rec.body.tracks.map(mapTrack));
     } catch (e) {
       console.error('❌ Recs attempt 1 failed:', e.statusCode, e.message);
-      console.error('Full error:', inspect(e.body ?? e));
+      console.error('Error body:', JSON.stringify(e.body, null, 2));
+      console.error('Error headers:', e.headers);
+      console.error('Full error object keys:', Object.keys(e));
+      
+      // Let's also log the exact URL being called
+      console.error('Request details - statusCode:', e.statusCode);
+      console.error('Request details - message:', e.message);
     }
 
     /* 3. fallback: random genre seeds ------------------------------------ */
@@ -192,12 +198,14 @@ router.get('/api/recommendations', async (req, res) => {
       return res.json(rec.body.tracks.map(mapTrack));
     } catch (e) {
       console.error('❌ Fallback failed:', e.statusCode, e.message);
-      console.error('Full error:', inspect(e.body ?? e));
+      console.error('Fallback error body:', JSON.stringify(e.body, null, 2));
+      console.error('Fallback error headers:', e.headers);
+      console.error('Fallback full error object keys:', Object.keys(e));
       return res.status(204).json([]);
     }
-  } catch (err) {
-    console.error('[Recommendations Route Error]', inspect(err));
-    res.status(500).json({ error: 'Failed to fetch recommendations' });
+  } catch (error) {
+    console.error('❌ Outer catch - unexpected error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
