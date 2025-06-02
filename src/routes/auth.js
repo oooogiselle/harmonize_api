@@ -1,118 +1,196 @@
-//  ── deps:  npm i spotify-web-api-node uuid cookie-session dotenv
-import express from "express";
-import SpotifyWebApi from "spotify-web-api-node";
-import { v4 as uuid } from "uuid";
-import User from "../models/User.js";
-import tokenStore from "../utils/tokenStore.js";
+import express from 'express';
+import crypto from 'crypto';
+import SpotifyWebApi from 'spotify-web-api-node';
+import { v4 as uuid } from 'uuid';
+import bcrypt from 'bcrypt';
+import User from '../models/User.js';
 
 const router = express.Router();
 
+const {
+  SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET,
+  SPOTIFY_REDIRECT_URI,
+  FRONTEND_BASE_URL,
+} = process.env;
+
 function buildSpotify() {
   return new SpotifyWebApi({
-    clientId:     process.env.SPOTIFY_CLIENT_ID,
-    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-    redirectUri:  process.env.SPOTIFY_REDIRECT_URI,
+    clientId: SPOTIFY_CLIENT_ID,
+    clientSecret: SPOTIFY_CLIENT_SECRET,
+    redirectUri: SPOTIFY_REDIRECT_URI,
   });
 }
 
-const SCOPES = [
-  "user-read-email",
-  "user-read-private",
-  "user-top-read",
-  "user-read-recently-played",
-];
-
-/* ── 1. /auth/spotify/login  →  redirect to Spotify ─────────────────────── */
-router.get("/spotify/login", (req, res) => {
-  const spotifyApi = buildSpotify(); // <- defined above with redirectUri
-
-  const state = uuid();
-  req.session.spotifyState = state;
-
-  const authorizeURL = spotifyApi.createAuthorizeURL(SCOPES, state);
-  console.log("🔗 Redirecting to Spotify:", authorizeURL); // <-- ADD THIS
-
-  res.redirect(authorizeURL);
-});
-
-router.get("/spotify/callback", async (req, res, next) => {
-  const { code, state } = req.query;
-  if (state !== req.session.spotifyState) return res.status(400).send("State mismatch");
-
-  const spotifyApi = buildSpotify();
-
+/* ───── LOGIN ───── */
+router.post('/login', async (req, res) => {
   try {
-    const { body } = await spotifyApi.authorizationCodeGrant(code);
-    const { access_token, refresh_token, expires_in } = body;
+    const { usernameOrEmail, password } = req.body;
+    if (!usernameOrEmail || !password)
+      return res.status(400).json({ message: 'Missing credentials' });
 
-    spotifyApi.setAccessToken(access_token);
-    const me = await spotifyApi.getMe();
+    const user = await User.findOne({
+      $or: [
+        { username: usernameOrEmail.toLowerCase() },
+        { email: usernameOrEmail.toLowerCase() },
+      ],
+    }).select('+password');
 
-    const user = await User.findOneAndUpdate(
-      { spotifyId: me.body.id },
-      {
-        spotifyId:   me.body.id,
-        username:    me.body.display_name,
-        displayName: me.body.display_name,
-        photo:       me.body.images?.[0]?.url ?? "",
-        email:       me.body.email,
-        country:     me.body.country,
-      },
-      { upsert: true, new: true }
-    );
-
-    tokenStore.save(user._id.toString(), {
-      access_token,
-      refresh_token,
-      expires_at: Date.now() + expires_in * 1000,
-    });
+    if (!user || !(await bcrypt.compare(password, user.password)))
+      return res.status(401).json({ message: 'Invalid credentials' });
 
     req.session.userId = user._id;
-    const redirectFrontend = process.env.NODE_ENV === 'production'
-    ? 'https://project-music-and-memories.onrender.com'
-    : 'http://127.0.0.1:5173/';
-
-    res.redirect(redirectFrontend);
-  } catch (e) {
-    console.error("Spotify callback error:", e.body || e.message || e);
-    res.status(500).send("Spotify authorization failed");
+    const { password: _pw, ...safeUser } = user.toObject();
+    res.json(safeUser);
+  } catch (err) {
+    console.error('[LOGIN ERROR]', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
+/* ───── LOGOUT ───── */
+router.post('/logout', (req, res) => {
+  req.session = null;
+  res.sendStatus(204);
+});
 
+/* ───── REGISTER ───── */
+router.post('/register', async (req, res) => {
+  try {
+    const { name, username, email, password, accountType = 'user' } = req.body;
+    if (!name || !username || !password)
+      return res.status(400).json({ message: 'Missing required fields' });
 
-router.get("/me/spotify", async (req, res) => {
-  const uid = req.session.userId;
-  if (!uid) return res.status(401).json({ error: "Not signed in" });
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.toLowerCase() },
+        ...(email ? [{ email: email.toLowerCase() }] : []),
+      ],
+    });
 
-  const tokens = tokenStore.get(uid);
-  if (!tokens) return res.status(401).json({ error: "No token" });
+    if (existingUser)
+      return res.status(409).json({ message: 'Username or email already taken' });
 
-  const spotifyApi = buildSpotify();
-  spotifyApi.setAccessToken(tokens.access_token);
-  spotifyApi.setRefreshToken(tokens.refresh_token);
+    const hash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      displayName: name,
+      username: username.toLowerCase(),
+      email: email?.toLowerCase(),
+      password: hash,
+      accountType,
+    });
 
-  /* refresh automatically if needed */
-  if (Date.now() >= tokens.expires_at) {
-    const { body } = await spotifyApi.refreshAccessToken();
-    tokens.access_token = body.access_token;
-    tokens.expires_at   = Date.now() + body.expires_in * 1000;
-    tokenStore.save(uid, tokens);
-    spotifyApi.setAccessToken(body.access_token);
+    res.status(201).json({ message: 'User registered', userId: user._id });
+  } catch (err) {
+    console.error('Registration error:', err);
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res.status(409).json({ message: `${field} already in use` });
+    }
+    res.status(500).json({ message: 'Server error' });
   }
+});
 
-  const [top, recent, profile, top_artists] = await Promise.all([
-    spotifyApi.getMyTopTracks({ limit: 10 }),
-    spotifyApi.getMyRecentlyPlayedTracks({ limit: 20 }),
-    spotifyApi.getMe(),
-    spotifyApi.getMyTopArtists({ limit: 10 }),
-  ]);
-  res.json({
-    profile : profile.body,
-    top     : top.body.items,
-    recent  : recent.body.items,
-    top_artists : top_artists.body.items,
-  });
+/* ───── SPOTIFY LOGIN ───── */
+router.get('/spotify/login', (req, res) => {
+  try {
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.spotifyState = state;
+
+    const spotify = buildSpotify();
+    const scopes = [
+      'user-read-private',
+      'user-read-email',
+      'user-top-read',
+      'user-read-recently-played',
+      'user-read-playback-state',
+      'user-modify-playback-state',
+    ];
+
+    const url = spotify.createAuthorizeURL(scopes, state);
+    res.redirect(url);
+  } catch (err) {
+    console.error('Spotify login error:', err);
+    res.status(500).json({ error: 'Spotify login failed' });
+  }
+});
+
+/* ───── SPOTIFY CALLBACK ───── */
+router.get('/spotify/callback', async (req, res) => {
+  const code = req.query.code;
+  const api = buildSpotify();
+
+  try {
+    const { body } = await api.authorizationCodeGrant(code);
+    const { access_token, refresh_token, expires_in } = body;
+
+    api.setAccessToken(access_token);
+    api.setRefreshToken(refresh_token);
+
+    const me = await api.getMe();
+    const profile = me.body;
+
+    let user = await User.findOne({ spotifyId: profile.id });
+
+    if (!user) {
+      user = await User.findOne({ email: profile.email });
+      if (user) user.spotifyId = profile.id;
+    }
+
+    if (!user) {
+      user = new User({
+        spotifyId: profile.id,
+        displayName: profile.display_name || 'Spotify User',
+        email: profile.email,
+        username: profile.id,
+        accountType: 'user',
+      });
+    }
+
+    user.spotifyAccessToken = access_token;
+    user.spotifyRefreshToken = refresh_token;
+    user.spotifyTokenExpiresAt = new Date(Date.now() + expires_in * 1000);
+    await user.save();
+
+    req.session.userId = user._id;
+    res.redirect(`${FRONTEND_BASE_URL}/profile`);
+  } catch (err) {
+    console.error('[Spotify Callback Error]', err.body || err.message || err);
+    res.status(500).json({ error: 'Spotify authorization failed' });
+  }
+});
+
+/* ───── USER SPOTIFY DATA ───── */
+router.get('/api/me/spotify', async (req, res) => {
+  const userId = req.session.userId;
+  if (!userId) return res.status(401).json({ error: 'Not logged in' });
+
+  const user = await User.findById(userId);
+  if (!user || !user.spotifyAccessToken)
+    return res.status(403).json({ error: 'Spotify not connected' });
+
+  const spotify = buildSpotify();
+  spotify.setAccessToken(user.spotifyAccessToken);
+  spotify.setRefreshToken(user.spotifyRefreshToken);
+
+  try {
+    const [profile, topTracks, topArtists, recent] = await Promise.all([
+      spotify.getMe(),
+      spotify.getMyTopTracks({ limit: 10 }),
+      spotify.getMyTopArtists({ limit: 10 }),
+      spotify.getMyRecentlyPlayedTracks({ limit: 10 }),
+    ]);
+
+    res.json({
+      profile: profile.body,
+      top: topTracks.body.items,
+      top_artists: topArtists.body.items,
+      recent: recent.body.items,
+    });
+  } catch (err) {
+    console.error('[Spotify API Error]', err.body || err.message || err);
+    res.status(500).json({ error: 'Spotify API failed' });
+  }
 });
 
 export default router;
