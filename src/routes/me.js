@@ -85,34 +85,43 @@ router.get('/api/me/spotify', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Not logged in' });
+
     if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
       return res.status(403).json({ error: 'Spotify not connected' });
 
     const spotify = await getUserSpotifyClient(user);
 
-    const [profile, topTracks, topArtists, recent] = await Promise.all([
+    const [profile, topTracks, topArtists, recent, playlists] = await Promise.all([
       spotify.getMe(),
       spotify.getMyTopTracks({ limit: 10 }),
       spotify.getMyTopArtists({ limit: 10 }),
       spotify.getMyRecentlyPlayedTracks({ limit: 10 }),
+      spotify.getUserPlaylists({ limit: 20 })
     ]);
 
     res.json({
-      profile : profile.body,
-      top     : topTracks .body.items?.map(mapTrack) ?? [],
+      profile: profile.body,
+      top: topTracks.body.items?.map(mapTrack) ?? [],
       top_artists: topArtists.body.items?.map((a) => ({
-        id     : a.id,
-        name   : a.name,
-        image  : a.images?.[0]?.url ?? null,
-        genres : a.genres ?? [],
+        id: a.id,
+        name: a.name,
+        image: a.images?.[0]?.url ?? null,
+        genres: a.genres ?? [],
       })) ?? [],
-      recent  : recent.body.items?.map((i) => mapTrack(i.track)) ?? [],
+      recent: recent.body.items?.map((i) => mapTrack(i.track)) ?? [],
+      playlists: playlists.body.items?.map((pl) => ({
+        id: pl.id,
+        name: pl.name,
+        image: pl.images?.[0]?.url ?? null,
+        tracks: pl.tracks.total
+      })) ?? []
     });
   } catch (err) {
     console.error('[Spotify /me Error]', inspect(err.body ?? err));
     res.status(500).json({ error: 'Spotify API failed' });
   }
 });
+
 
 /* ───────── GET /api/recommendations with AUTH DEBUG ───────── */
 /* ───────── SPOTIFY RECOMMENDATIONS WORKAROUND ───────── */
