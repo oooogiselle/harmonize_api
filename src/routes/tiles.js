@@ -58,13 +58,13 @@ router.get('/:userId', requireAuth, async (req, res) => {
   }
 });
 
-/* ───────── POST /api/tiles - Create new tile ───────── */
+
 router.post('/', requireAuth, async (req, res) => {
   try {
     const currentUserId = req.session.userId;
-    const { userId, type, content, x, y, w, h, title } = req.body;
+    const { userId, type, content, x, y, w, h, title, bgImage, bgColor, font } = req.body;
 
-    console.log('[TILES] Creating tile:', { userId, type, currentUserId });
+    console.log('[TILES] Creating tile with full request body:', req.body);
 
     // Validate that user can create tiles for this userId
     if (userId !== currentUserId) {
@@ -80,19 +80,24 @@ router.post('/', requireAuth, async (req, res) => {
       type: type || 'text',
       content: content || '',
       title: title || '',
+      bgImage: bgImage || '',
+      bgColor: bgColor || '',
+      font: font || '',
       x: Number(x) || 0,
       y: Number(y) || 0,
       w: Number(w) || 1,
       h: Number(h) || 1,
     };
 
+    console.log('[TILES] Final tile data to save:', tileData);
+
     const tile = await Tile.create(tileData);
-    console.log('[TILES] Created tile:', tile._id);
+    console.log('[TILES] Created tile:', tile);
     
     res.status(201).json(tile);
   } catch (err) {
     console.error('[TILES] Error creating tile:', err);
-    res.status(500).json({ error: 'Failed to create tile' });
+    res.status(500).json({ error: 'Failed to create tile', details: err.message });
   }
 });
 
@@ -140,38 +145,54 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
     const { updates } = req.body;
     const currentUserId = req.session.userId;
 
-    console.log('[TILES] Bulk layout update:', updates?.length, 'tiles');
+    console.log('[TILES] Bulk layout update request body:', req.body);
+    console.log('[TILES] Updates array:', updates);
+    console.log('[TILES] Current user ID:', currentUserId);
 
     if (!Array.isArray(updates)) {
+      console.error('[TILES] Updates is not an array:', typeof updates);
       return res.status(400).json({ error: 'Updates must be an array' });
+    }
+
+    if (updates.length === 0) {
+      console.log('[TILES] No updates provided');
+      return res.json({ updated: 0, tiles: [] });
     }
 
     const results = [];
     
     for (const update of updates) {
-      const { _id, x, y, w, h } = update;
+      const { _id, id, x, y, w, h } = update;
+      const tileId = _id || id; // Handle both _id and id
       
-      if (!isValidObjectId(_id)) {
-        console.warn('[TILES] Skipping invalid tile ID:', _id);
+      console.log('[TILES] Processing update for tile:', tileId, update);
+      
+      if (!tileId || !isValidObjectId(tileId)) {
+        console.warn('[TILES] Skipping invalid tile ID:', tileId);
         continue;
       }
 
       try {
         // Verify ownership
-        const tile = await Tile.findById(_id);
-        if (!tile || tile.userId.toString() !== currentUserId) {
-          console.warn('[TILES] Skipping tile not owned by user:', _id);
+        const tile = await Tile.findById(tileId);
+        if (!tile) {
+          console.warn('[TILES] Tile not found:', tileId);
+          continue;
+        }
+        
+        if (tile.userId.toString() !== currentUserId) {
+          console.warn('[TILES] Tile not owned by user:', tileId, 'owner:', tile.userId, 'current:', currentUserId);
           continue;
         }
 
         // Update layout
         const updatedTile = await Tile.findByIdAndUpdate(
-          _id,
+          tileId,
           { 
-            x: Number(x), 
-            y: Number(y), 
-            w: Number(w), 
-            h: Number(h),
+            x: Number(x) || 0, 
+            y: Number(y) || 0, 
+            w: Number(w) || 1, 
+            h: Number(h) || 1,
             updatedAt: new Date()
           },
           { new: true }
@@ -179,9 +200,10 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
 
         if (updatedTile) {
           results.push(updatedTile);
+          console.log('[TILES] Successfully updated tile:', tileId);
         }
       } catch (err) {
-        console.error('[TILES] Error updating tile in bulk:', _id, err);
+        console.error('[TILES] Error updating individual tile:', tileId, err);
       }
     }
 
@@ -189,7 +211,7 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
     res.json({ updated: results.length, tiles: results });
   } catch (err) {
     console.error('[TILES] Error in bulk layout update:', err);
-    res.status(500).json({ error: 'Failed to update tile layouts' });
+    res.status(500).json({ error: 'Failed to update tile layouts', details: err.message });
   }
 });
 

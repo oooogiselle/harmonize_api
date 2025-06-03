@@ -118,6 +118,24 @@ router.get('/spotify/login', (req, res) => {
   }
 });
 
+router.get('/api/me', async (req, res) => {
+  try {
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findById(req.session.userId).select('-password');
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* ───── SPOTIFY CALLBACK ───── */
 router.get('/spotify/callback', async (req, res) => {
   const code = req.query.code;
