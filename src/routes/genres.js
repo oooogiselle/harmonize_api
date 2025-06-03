@@ -4,7 +4,13 @@ const router = express.Router();
 
 router.get('/api/genre-stats', async (req, res) => {
   try {
-    const spotify = await getUserSpotifyClient(req.user);
+    // 🔧 FIXED: pull user ID from session
+    const userId = req.session?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const spotify = await getUserSpotifyClient({ id: userId });
 
     // 1) collect top artists across 3 windows
     const ranges = ['short_term', 'medium_term', 'long_term'];
@@ -28,12 +34,14 @@ router.get('/api/genre-stats', async (req, res) => {
     const listened   = Object.keys(counts);
     const unlistened = seedGenres.filter(g => !listened.includes(g));
 
+    // ✅ return JSON (make sure frontend gets content-type: application/json)
     res.json({
       listened:  listened.sort((a, b) => counts[b] - counts[a]),
       histogram: counts,
       unlistened,
       coverage:  (listened.length / seedGenres.length).toFixed(2)
     });
+
   } catch (e) {
     console.error('[genre-stats]', e);
     res.status(500).json({ error: 'Failed to build genre stats' });
