@@ -3,11 +3,14 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'cookie-session';
-
+import tilesRoutes from './routes/tiles.js';
+import friendsRoutes from './routes/friends.js';
+import eventRoutes from './routes/events.js';
+import ticketmasterRoutes from './routes/ticketmaster.js';
+import geocodeRouter from './routes/geocode.js';
 import authRoutes    from './routes/auth.js';
 import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
-import eventRoutes   from './routes/events.js';
 import meRoutes      from './routes/me.js';
 import tilesRoutes   from './routes/tiles.js';
 import genreRoutes   from './routes/genres.js';
@@ -92,7 +95,18 @@ if (!isProduction) {
   });
 }
 
-/* ───────── Health check ───────── */
+/* ───────── CORS setup ───────── */
+app.use(cors({
+  origin: [
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://localhost:5173',
+    'https://project-music-and-memories.onrender.com',
+  ],
+  credentials: true,
+}));
+
+/* ───────── Health check endpoint ───────── */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -103,17 +117,27 @@ app.get('/health', (req, res) => {
   });
 });
 
+
 /* ───────── Route setup ───────── */
-app.use('/auth', authRoutes);
-app.use('/spotify', spotifyRoutes);
-app.use('/artists', artistRoutes);
-app.use('/events', eventRoutes);
+app.use('/auth',              authRoutes);
+app.use('/spotify',           spotifyRoutes);
+app.use('/api/ticketmaster', ticketmasterRoutes);
+app.use('/artists',           artistRoutes);
+app.use('/events',            eventRoutes);
 
-app.use('/', genreRoutes); // moved above meRoutes
-app.use('/', meRoutes);
+// Ensure genre routes are mounted before meRoutes
+app.use('/',                  genreRoutes);
+app.use('/',                  meRoutes);
 
-app.use('/api/tiles', tilesRoutes);
-app.use('/api/users/:userId/tiles', tilesRoutes);
+app.use('/api/geocode',       geocodeRouter);
+app.use('/api/tiles',         tilesRoutes);
+
+// Specific user tiles route handler
+app.use('/api/users/:userId/tiles', (req, res, next) => {
+  req.url = `/user/${req.params.userId}`;
+  tilesRoutes(req, res, next);
+});
+
 
 /* ───────── Error handling ───────── */
 app.use((err, req, res, next) => {
