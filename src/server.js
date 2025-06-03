@@ -12,7 +12,6 @@ import authRoutes    from './routes/auth.js';
 import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
 import meRoutes      from './routes/me.js';
-import tilesRoutes   from './routes/tiles.js';
 import genreRoutes   from './routes/genres.js';
 
 dotenv.config();
