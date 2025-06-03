@@ -10,6 +10,7 @@ import artistRoutes  from './routes/artists.js';
 import eventRoutes   from './routes/events.js';
 import meRoutes      from './routes/me.js';
 import tilesRoutes   from './routes/tiles.js';
+import genreRoutes   from './routes/genres.js';
 
 dotenv.config();
 
@@ -28,20 +29,18 @@ const app = express();
 /* ───────── Trust proxy for secure cookies ───────── */
 app.set('trust proxy', 1);
 
-/* ───────── CORS config (MOVED BEFORE SESSION) ───────── */
+/* ───────── CORS config ───────── */
+const allowedOrigins = [
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5174',
+  FRONTEND,
+];
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'http://127.0.0.1:5173',
-      'http://localhost:5173', 
-      'http://localhost:3000',
-      'http://localhost:5174',
-      FRONTEND
-    ];
-    
+    if (!origin) return callback(null, true); // Allow non-browser requests
     if (allowedOrigins.includes(origin) || !isProduction) {
       callback(null, true);
     } else {
@@ -52,21 +51,18 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
+    'Content-Type',
+    'Authorization',
     'Cookie',
     'X-Requested-With',
     'Accept',
-    'Origin'
+    'Origin',
   ],
   exposedHeaders: ['Set-Cookie'],
-  optionsSuccessStatus: 200 // For legacy browser support
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
-
-/* ───────── Handle preflight requests ───────── */
-app.options('*', cors(corsOptions));
 
 /* ───────── Session cookie configuration ───────── */
 app.use(
@@ -76,7 +72,7 @@ app.use(
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     sameSite: isProduction ? 'none' : 'lax',
     secure: isProduction,
-    httpOnly: false,
+    httpOnly: true, // fixed: was false
     overwrite: true,
     signed: true,
   })
@@ -85,7 +81,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-/* ───────── Add debugging middleware ───────── */
+/* ───────── Debugging (non-production only) ───────── */
 if (!isProduction) {
   app.use((req, res, next) => {
     console.log(`${req.method} ${req.path}`);
@@ -96,44 +92,44 @@ if (!isProduction) {
   });
 }
 
-/* ───────── Health check endpoint ───────── */
+/* ───────── Health check ───────── */
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     session: req.session?.userId ? 'active' : 'none',
     environment: NODE_ENV,
-    cors: 'enabled'
+    cors: 'enabled',
   });
 });
 
 /* ───────── Route setup ───────── */
-app.use('/auth',              authRoutes);
-app.use('/spotify',           spotifyRoutes);
-app.use('/artists',           artistRoutes);
-app.use('/events',            eventRoutes);
-app.use('/',                  meRoutes);
+app.use('/auth', authRoutes);
+app.use('/spotify', spotifyRoutes);
+app.use('/artists', artistRoutes);
+app.use('/events', eventRoutes);
 
-// Fix the tiles routing - this was the main issue
-app.use('/api/tiles',         tilesRoutes);
+app.use('/', genreRoutes); // moved above meRoutes
+app.use('/', meRoutes);
+
+app.use('/api/tiles', tilesRoutes);
 app.use('/api/users/:userId/tiles', tilesRoutes);
 
-/* ───────── Error handling middleware ───────── */
+/* ───────── Error handling ───────── */
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  
-  // Handle CORS errors specifically
+
   if (err.message && err.message.includes('CORS')) {
-    return res.status(403).json({ 
+    return res.status(403).json({
       error: 'CORS error',
       message: 'Origin not allowed',
-      origin: req.get('Origin')
+      origin: req.get('Origin'),
     });
   }
-  
-  res.status(500).json({ 
+
+  res.status(500).json({
     error: 'Internal server error',
-    ...(isProduction ? {} : { details: err.message })
+    ...(isProduction ? {} : { details: err.message }),
   });
 });
 
@@ -144,32 +140,29 @@ app.use('*', (req, res) => {
 });
 
 /* ───────── DB connection ───────── */
-mongoose.connect(MONGO_URI)
+mongoose
+  .connect(MONGO_URI)
   .then(() => console.log('✓ MongoDB connected'))
-  .catch(err => {
+  .catch((err) => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
   });
 
-/* ───────── Server startup ───────── */
+/* ───────── Start server ───────── */
 app.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`);
   console.log(`📍 Environment: ${NODE_ENV}`);
   console.log(`🔗 Frontend: ${FRONTEND}`);
-  console.log(`🌐 CORS enabled for:`, corsOptions.origin);
+  console.log(`🌐 CORS allow-list:`, allowedOrigins);
 });
 
 /* ───────── Graceful shutdown ───────── */
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  mongoose.connection.close(() => {
-    process.exit(0);
-  });
+  mongoose.connection.close(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
-  mongoose.connection.close(() => {
-    process.exit(0);
-  });
+  mongoose.connection.close(() => process.exit(0));
 });
