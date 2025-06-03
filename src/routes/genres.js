@@ -76,4 +76,35 @@ router.get('/api/genre-stats', async (req, res) => {
   }
 });
 
+router.get('/api/genre-timeline', async (req, res) => {
+  try {
+    const userId = req.session?.userId;
+    const user = await User.findById(userId);
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+    const spotify = await getUserSpotifyClient(user);
+    const ranges = ['short_term', 'medium_term', 'long_term'];
+    const timeline = {};
+
+    for (const range of ranges) {
+      const top = await spotify.getMyTopArtists({ limit: 50, time_range: range });
+      const genreCounts = {};
+
+      top.body.items.forEach(artist => {
+        artist.genres.forEach(g => {
+          genreCounts[g] = (genreCounts[g] || 0) + 1;
+        });
+      });
+
+      timeline[range] = genreCounts;
+    }
+
+    res.json(timeline);
+  } catch (err) {
+    console.error('[genre-timeline]', err);
+    res.status(500).json({ error: 'Failed to build genre timeline' });
+  }
+});
+
+
 export default router;
