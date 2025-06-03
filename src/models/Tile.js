@@ -8,8 +8,11 @@ const tileSchema = new mongoose.Schema(
     content: { type: String },
     bgImage: { type: String },
     bgColor: { type: String },
-    font: { type: String },
-    x: Number, y: Number, w: Number, h: Number,
+    font:    { type: String },
+    x: Number, 
+    y: Number, 
+    w: Number, 
+    h: Number,
   },
   { timestamps: true }
 );

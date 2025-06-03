@@ -58,13 +58,13 @@ router.get('/:userId', requireAuth, async (req, res) => {
   }
 });
 
-/* ───────── POST /api/tiles - Create new tile ───────── */
+
 router.post('/', requireAuth, async (req, res) => {
   try {
     const currentUserId = req.session.userId;
-    const { userId, type, content, x, y, w, h, title } = req.body;
+    const { userId, type, content, x, y, w, h, title, bgImage, bgColor, font } = req.body;
 
-    console.log('[TILES] Creating tile:', { userId, type, currentUserId });
+    console.log('[TILES] Creating tile with full request body:', req.body);
 
     // Validate that user can create tiles for this userId
     if (userId !== currentUserId) {
@@ -80,19 +80,24 @@ router.post('/', requireAuth, async (req, res) => {
       type: type || 'text',
       content: content || '',
       title: title || '',
+      bgImage: bgImage || '',
+      bgColor: bgColor || '',
+      font: font || '',
       x: Number(x) || 0,
       y: Number(y) || 0,
       w: Number(w) || 1,
       h: Number(h) || 1,
     };
 
+    console.log('[TILES] Final tile data to save:', tileData);
+
     const tile = await Tile.create(tileData);
-    console.log('[TILES] Created tile:', tile._id);
+    console.log('[TILES] Created tile:', tile);
     
     res.status(201).json(tile);
   } catch (err) {
     console.error('[TILES] Error creating tile:', err);
-    res.status(500).json({ error: 'Failed to create tile' });
+    res.status(500).json({ error: 'Failed to create tile', details: err.message });
   }
 });
 
