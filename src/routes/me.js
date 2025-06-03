@@ -115,6 +115,9 @@ router.get('/api/me/spotify', async (req, res) => {
 });
 
 /* ───────── GET /api/recommendations with AUTH DEBUG ───────── */
+/* ───────── SPOTIFY RECOMMENDATIONS WORKAROUND ───────── */
+/* Replace your current /api/recommendations endpoint with this */
+
 router.get('/api/recommendations', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -122,115 +125,247 @@ router.get('/api/recommendations', async (req, res) => {
     if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
       return res.status(403).json({ error: 'Spotify not connected' });
 
-    console.log('🔐 Debug: User has tokens:', {
-      hasAccessToken: !!user.spotifyAccessToken,
-      hasRefreshToken: !!user.spotifyRefreshToken,
-      accessTokenLength: user.spotifyAccessToken?.length || 0,
-      refreshTokenLength: user.spotifyRefreshToken?.length || 0
+    const spotify = await getUserSpotifyClient(user);
+    console.log('🎯 Generating recommendations using workaround...');
+
+    // Strategy 1: Get user's top artists and find related artists
+    const [topArtists, topTracks, recentTracks] = await Promise.all([
+      spotify.getMyTopArtists({ limit: 10, time_range: 'medium_term' }),
+      spotify.getMyTopTracks({ limit: 15, time_range: 'medium_term' }),
+      spotify.getMyRecentlyPlayedTracks({ limit: 10 })
+    ]);
+
+    const recommendations = [];
+    const usedTrackIds = new Set();
+    
+    // Add user's existing tracks to avoid duplicates
+    topTracks.body.items?.forEach(track => usedTrackIds.add(track.id));
+    recentTracks.body.items?.forEach(item => usedTrackIds.add(item.track.id));
+
+    console.log(`📊 Found ${topArtists.body.items?.length || 0} top artists`);
+
+    // Method 1: Related Artists -> Top Tracks
+    for (const artist of topArtists.body.items?.slice(0, 4) || []) {
+      try {
+        console.log(`🔍 Finding related artists for ${artist.name}`);
+        const related = await spotify.getArtistRelatedArtists(artist.id);
+        
+        for (const relatedArtist of related.body.artists?.slice(0, 3) || []) {
+          try {
+            const artistTopTracks = await spotify.getArtistTopTracks(relatedArtist.id, 'US');
+            
+            for (const track of artistTopTracks.body.tracks?.slice(0, 2) || []) {
+              if (!usedTrackIds.has(track.id) && recommendations.length < 15) {
+                recommendations.push({
+                  ...mapTrack(track),
+                  recommendation_reason: `Because you listen to ${artist.name}`
+                });
+                usedTrackIds.add(track.id);
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ Failed to get top tracks for ${relatedArtist.name}`);
+          }
+        }
+      } catch (err) {
+        console.log(`⚠️ Failed to get related artists for ${artist.name}`);
+      }
+    }
+
+    // Method 2: Artists from user's tracks -> More albums
+    const artistsFromTracks = new Set();
+    topTracks.body.items?.forEach(track => {
+      track.artists?.forEach(artist => artistsFromTracks.add(artist.id));
     });
 
-    const spotify = await getUserSpotifyClient(user);
+    console.log(`🎵 Exploring albums from ${artistsFromTracks.size} artists`);
     
-    // DEBUG: Test basic authentication first
-    console.log('🔐 Testing basic authentication...');
-    try {
-      const me = await spotify.getMe();
-      console.log('✅ Auth test passed! User:', me.body.display_name, '(', me.body.id, ')');
-      console.log('✅ Country:', me.body.country, 'Product:', me.body.product);
-    } catch (e) {
-      console.error('❌ Auth test FAILED:', e.statusCode, e.message);
-      console.error('Auth error body:', JSON.stringify(e.body, null, 2));
-      return res.status(401).json({ error: 'Spotify authentication failed' });
-    }
-
-    // DEBUG: Test if we can access user's library
-    console.log('🔐 Testing library access...');
-    try {
-      const playlists = await spotify.getUserPlaylists({ limit: 1 });
-      console.log('✅ Library access OK! User has', playlists.body.total, 'playlists');
-    } catch (e) {
-      console.error('❌ Library access failed:', e.statusCode, e.message);
-      console.error('Library error body:', JSON.stringify(e.body, null, 2));
-    }
-
-    // DEBUG: Try the simplest possible recommendation call
-    console.log('🔐 Testing simplest recommendation call...');
-    try {
-      // Just one genre, no other parameters
-      const simpleRec = await spotify.getRecommendations({
-        seed_genres: ['pop'],
-        limit: 1
-      });
-      console.log('✅ Simple rec call SUCCESS!');
-      return res.json(simpleRec.body.tracks.map(mapTrack));
-    } catch (e) {
-      console.error('❌ Simple rec call failed:', e.statusCode, e.message);
-      console.error('Simple rec error body:', JSON.stringify(e.body, null, 2));
-      console.error('Simple rec headers:', e.headers);
-      
-      // Debug the request details
-      console.error('🔍 Request debugging:');
-      console.error('  - Status code:', e.statusCode);
-      console.error('  - Error type:', typeof e);
-      console.error('  - Error keys:', Object.keys(e));
-      
-      if (e.request) {
-        console.error('  - Request URI:', e.request.uri);
-        console.error('  - Request method:', e.request.method);
-        console.error('  - Request headers:', JSON.stringify(e.request.headers, null, 2));
+    for (const artistId of Array.from(artistsFromTracks).slice(0, 3)) {
+      try {
+        const albums = await spotify.getArtistAlbums(artistId, { 
+          include_groups: 'album,single', 
+          limit: 3,
+          market: 'US'
+        });
+        
+        for (const album of albums.body.items?.slice(0, 2) || []) {
+          try {
+            const albumTracks = await spotify.getAlbumTracks(album.id, { limit: 3 });
+            
+            for (const track of albumTracks.body.items || []) {
+              if (!usedTrackIds.has(track.id) && recommendations.length < 20) {
+                // Get full track info since album tracks don't have complete data
+                try {
+                  const fullTrack = await spotify.getTrack(track.id);
+                  recommendations.push({
+                    ...mapTrack(fullTrack.body),
+                    recommendation_reason: `From ${album.name}`
+                  });
+                  usedTrackIds.add(track.id);
+                } catch (err) {
+                  console.log(`⚠️ Failed to get full track info for ${track.id}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ Failed to get tracks from album ${album.id}`);
+          }
+        }
+      } catch (err) {
+        console.log(`⚠️ Failed to get albums for artist ${artistId}`);
       }
     }
 
-    // DEBUG: Test available genres endpoint specifically
-    console.log('🔐 Testing available genres endpoint...');
-    try {
-      const genres = await spotify.getAvailableGenreSeeds();
-      console.log('✅ Available genres call SUCCESS! Found', genres.body.genres.length, 'genres');
-      console.log('First few genres:', genres.body.genres.slice(0, 10));
-    } catch (e) {
-      console.error('❌ Available genres failed:', e.statusCode, e.message);
-      console.error('Genres error body:', JSON.stringify(e.body, null, 2));
-    }
-
-    // DEBUG: Check token expiration
-    console.log('🔐 Checking token status...');
-    try {
-      // Try to refresh token to see if that helps
-      console.log('🔄 Attempting token refresh...');
-      const refreshResult = await spotify.refreshAccessToken();
-      console.log('✅ Token refresh successful!');
-      
-      // Update user's token in database
-      user.spotifyAccessToken = refreshResult.body.access_token;
-      if (refreshResult.body.refresh_token) {
-        user.spotifyRefreshToken = refreshResult.body.refresh_token;
+    // Method 3: Featured Playlists (if we still need more tracks)
+    if (recommendations.length < 15) {
+      console.log('🎧 Adding tracks from featured playlists...');
+      try {
+        const featured = await spotify.getFeaturedPlaylists({ limit: 5, country: 'US' });
+        
+        for (const playlist of featured.body.playlists?.items?.slice(0, 2) || []) {
+          try {
+            const playlistTracks = await spotify.getPlaylistTracks(playlist.id, { 
+              limit: 5,
+              fields: 'items(track(id,name,artists,album,preview_url,external_urls))'
+            });
+            
+            for (const item of playlistTracks.body.items || []) {
+              if (item.track && !usedTrackIds.has(item.track.id) && recommendations.length < 20) {
+                recommendations.push({
+                  ...mapTrack(item.track),
+                  recommendation_reason: `From "${playlist.name}" playlist`
+                });
+                usedTrackIds.add(item.track.id);
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ Failed to get tracks from playlist ${playlist.id}`);
+          }
+        }
+      } catch (err) {
+        console.log('⚠️ Failed to get featured playlists');
       }
-      await user.save();
-      
-      // Try recommendation again with fresh token
-      console.log('🔄 Retrying recommendation with fresh token...');
-      const retryRec = await spotify.getRecommendations({
-        seed_genres: ['pop'],
-        limit: 1
-      });
-      console.log('✅ Retry with fresh token SUCCESS!');
-      return res.json(retryRec.body.tracks.map(mapTrack));
-      
-    } catch (e) {
-      console.error('❌ Token refresh failed:', e.statusCode, e.message);
-      console.error('Refresh error body:', JSON.stringify(e.body, null, 2));
     }
 
-    // If we get here, everything failed
-    console.error('❌ All debugging attempts failed');
-    return res.status(500).json({ 
-      error: 'Spotify API unavailable',
-      details: 'All authentication and API tests failed'
+    // Shuffle and limit results
+    const finalRecommendations = recommendations
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20);
+
+    console.log(`✅ Generated ${finalRecommendations.length} recommendations`);
+    
+    res.json(finalRecommendations);
+
+  } catch (error) {
+    console.error('❌ Recommendations workaround error:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate recommendations',
+      details: error.message 
+    });
+  }
+});
+
+/* ───────── Genre-based Discovery (Alternative approach) ───────── */
+router.get('/api/discover/:method', async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Not logged in' });
+    if (!user.spotifyAccessToken || !user.spotifyRefreshToken)
+      return res.status(403).json({ error: 'Spotify not connected' });
+
+    const spotify = await getUserSpotifyClient(user);
+    const { method } = req.params;
+    let tracks = [];
+
+    switch (method) {
+      case 'new-releases':
+        console.log('🆕 Getting new releases...');
+        const newReleases = await spotify.getNewReleases({ limit: 20, country: 'US' });
+        
+        for (const album of newReleases.body.albums?.items?.slice(0, 10) || []) {
+          try {
+            const albumTracks = await spotify.getAlbumTracks(album.id, { limit: 2 });
+            for (const track of albumTracks.body.items?.slice(0, 1) || []) {
+              const fullTrack = await spotify.getTrack(track.id);
+              tracks.push(mapTrack(fullTrack.body));
+            }
+          } catch (err) {
+            console.log(`Failed to get tracks from new release ${album.id}`);
+          }
+        }
+        break;
+
+      case 'categories':
+        console.log('🏷️ Getting category playlists...');
+        const categories = await spotify.getCategories({ limit: 5, country: 'US' });
+        
+        for (const category of categories.body.categories?.items || []) {
+          try {
+            const categoryPlaylists = await spotify.getCategoryPlaylists(category.id, { limit: 2 });
+            
+            for (const playlist of categoryPlaylists.body.playlists?.items || []) {
+              try {
+                const playlistTracks = await spotify.getPlaylistTracks(playlist.id, { limit: 3 });
+                for (const item of playlistTracks.body.items || []) {
+                  if (item.track && tracks.length < 20) {
+                    tracks.push({
+                      ...mapTrack(item.track),
+                      category: category.name
+                    });
+                  }
+                }
+              } catch (err) {
+                console.log(`Failed to get tracks from playlist ${playlist.id}`);
+              }
+            }
+          } catch (err) {
+            console.log(`Failed to get playlists for category ${category.id}`);
+          }
+        }
+        break;
+
+      case 'featured':
+        console.log('⭐ Getting featured playlists...');
+        const featured = await spotify.getFeaturedPlaylists({ limit: 10, country: 'US' });
+        
+        for (const playlist of featured.body.playlists?.items || []) {
+          try {
+            const playlistTracks = await spotify.getPlaylistTracks(playlist.id, { limit: 3 });
+            for (const item of playlistTracks.body.items || []) {
+              if (item.track && tracks.length < 20) {
+                tracks.push({
+                  ...mapTrack(item.track),
+                  playlist: playlist.name
+                });
+              }
+            }
+          } catch (err) {
+            console.log(`Failed to get tracks from featured playlist ${playlist.id}`);
+          }
+        }
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid discovery method' });
+    }
+
+    // Shuffle results
+    const shuffledTracks = tracks
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20);
+
+    res.json({
+      method,
+      tracks: shuffledTracks,
+      count: shuffledTracks.length
     });
 
   } catch (error) {
-    console.error('❌ Outer catch - unexpected error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error(`❌ Discovery method ${req.params.method} error:`, error);
+    res.status(500).json({ 
+      error: 'Failed to discover music',
+      details: error.message 
+    });
   }
 });
 
