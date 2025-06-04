@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import MusicPost from '../models/MusicPost.js';
 import { getAccessToken } from '../spotifyClient.js';
 import { authenticateUser } from '../middleware/authMiddleware.js';
-import { findPreview } from 'spotify-preview-finder';
+import spotifyPreviewFinder from 'spotify-preview-finder';
 
 const router = Router();
 
@@ -50,13 +50,20 @@ router.get('/spotify/search', async (req, res) => {
         // if Spotify doesn't provide a preview URL, try to find one
         if (!track.preview_url) {
           try {
-            console.log(`Finding preview for: ${track.name} by ${track.artists[0]?.name}`);
-            const previewData = await findPreview(track.name, track.artists[0]?.name);
+            const searchQuery = `${track.name} ${track.artists[0]?.name}`;
+            console.log(`Finding preview for: ${searchQuery}`);
+
+            const previewResult = await spotifyPreviewFinder(searchQuery, 1);
             
-            if (previewData && previewData.url) {
-              console.log(`Found preview URL: ${previewData.url}`);
-              track.preview_url = previewData.url;
-              track.preview_source = previewData.source; // add source info for debugging
+            if (previewResult.success && previewResult.results.length > 0) {
+              const firstResult = previewResult.results[0];
+              if (firstResult.previewUrls && firstResult.previewUrls.length > 0) {
+                console.log(`Found preview URL: ${previewData.url}`);
+                track.preview_url = previewData.url;
+                track.preview_source = 'spotify-preview-finder';
+              } else {
+                console.log(`No preview URLs found for: ${track.name}`);
+              }
             } else {
               console.log(`No preview found for: ${track.name}`);
             }
@@ -78,18 +85,24 @@ router.get('/spotify/search', async (req, res) => {
 // helper function to find preview URL
 const findPreviewUrl = async (title, artist) => {
   try {
-    console.log(`Attempting to find preview for: "${title}" by "${artist}"`);
-    const previewData = await findPreview(title, artist);
+    const searchQuery = `${title} ${artist}`;
+    console.log(`Attempting to find preview for: "${searchQuery}"`);
+
+    const previewResult = await spotifyPreviewFinder(searchQuery, 1);
     
-    if (previewData && previewData.url) {
-      console.log(`Preview found from ${previewData.source}: ${previewData.url}`);
-      return {
-        url: previewData.url,
-        source: previewData.source
-      };
+    if (previewResult.success && previewResult.results.length > 0) {
+      const firstResult = previewResult.results[0];
+      if (firstResult.previewUrls && firstResult.previewUrls.length > 0) {
+        console.log(`Preview found: ${firstResult.previewUrls[0]}`);
+        return {
+          url: firstResult.previewUrls[0],
+          source: 'spotify-preview-finder',
+          spotifyUrl: firstResult.spotifyUrl
+        };
+      }
     }
     
-    console.log(`No preview found for: "${title}" by "${artist}"`);
+    console.log(`No preview found for: "${searchQuery}"`);
     return null;
   } catch (error) {
     console.error(`Error finding preview for "${title}" by "${artist}":`, error.message);
@@ -109,9 +122,16 @@ router.post('/', authenticateUser, async (req, res) => {
   try {
     let postData = {};
 
-    // If track details are provided from frontend, use them
+    // if track details are provided from frontend, use them
     if (title && artist) {
       let finalPreviewUrl = previewUrl;
+
+      // if no preview URL provided or it's empty, try to find one
+      if (!finalPreviewUrl) {
+        console.log('No preview URL provided, attempting to find one...');
+        const previewData = await findPreviewUrl(title, artist);
+        finalPreviewUrl = previewData?.url || '';
+      }
 
       postData = {
         spotifyTrackId,
