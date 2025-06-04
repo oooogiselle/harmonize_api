@@ -207,20 +207,30 @@ router.post('/', authenticateUser, async (req, res) => {
 // LIKE a music post (requires authentication)
 router.post('/:id/like', authenticateUser, async (req, res) => {
   const userId = req.user._id;
+  const postId = req.params.id;
 
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+  if (!mongoose.Types.ObjectId.isValid(postId)) {
     return res.status(400).json({ error: 'Invalid post ID' });
   }
 
   try {
-    const musicPost = await MusicPost.findById(req.params.id);
+    const musicPost = await MusicPost.findById(postId)
+      .populate('uploadedBy', 'displayName username');
+    ;
     if (!musicPost) return res.status(404).json({ error: 'Post not found' });
 
-    if (!musicPost.likedBy.includes(userId)) {
-      musicPost.likedBy.push(userId);
-      musicPost.likes += 1;
-      await musicPost.save();
+    // check if user has already liked this post
+    const hasLiked = musicPost.likedBy.some(id => id.toString() === userId.toString());
+    if (hasLiked) {
+      return res.status(400).json({ error: 'Post already liked by user' });
     }
+
+    // add user to likedBy array and increment likes count
+    musicPost.likedBy.push(userId);
+    musicPost.likes = musicPost.likedBy.length; // Ensure consistency
+    
+    await musicPost.save();
+    console.log(`User ${userId} liked post ${postId}. Total likes: ${musicPost.likes}`);
 
     res.json(musicPost);
   } catch (err) {
@@ -232,27 +242,32 @@ router.post('/:id/like', authenticateUser, async (req, res) => {
 // UNLIKE a music post (requires authentication)
 router.post('/:id/unlike', authenticateUser, async (req, res) => {
   const userId = req.user._id;
+  const postId = req.params.id;
 
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+  if (!mongoose.Types.ObjectId.isValid(postId)) {
     return res.status(400).json({ error: 'Invalid post ID' });
   }
 
   try {
-    const musicPost = await MusicPost.findById(req.params.id);
+    const musicPost = await MusicPost.findById(postId);
     if (!musicPost) {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    const index = musicPost.likedBy.findIndex(
-      (id) => id.toString() === userId.toString()
-    );
+    // find the user in the likedBy array
+    const userIndex = musicPost.likedBy.findIndex(id => id.toString() === userId.toString());
 
-    if (index !== -1) {
-      musicPost.likedBy.splice(index, 1);
-      musicPost.likes = Math.max(0, musicPost.likes - 1);
-      await musicPost.save();
+    if (userIndex === -1) {
+      return res.status(400).json({ error: 'Post not liked by user' });
     }
 
+    // remove user from likedBy array and update likes count
+    musicPost.likedBy.splice(userIndex, 1);
+    musicPost.likes = musicPost.likedBy.length; // Ensure consistency
+
+    await musicPost.save();
+    
+    console.log(`User ${userId} unliked post ${postId}. Total likes: ${musicPost.likes}`);
     res.json(musicPost);
   } catch (err) {
     console.error('Error unliking post:', err);
