@@ -1,13 +1,15 @@
 // models/Friend.js
 import mongoose from 'mongoose';
 
-const friendSchema = new mongoose.Schema({
-  userId: { type: String, required: true },        // the one who is following
-  friendId: { type: String, required: true },      // the one being followed
-  createdAt: { type: Date, default: Date.now },
-});
+const friendSchema = new mongoose.Schema(
+  {
+    /* follower */ userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /* followee */ friendId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
 
-friendSchema.index({ userId: 1, friendId: 1 }, { unique: true }); // prevent duplicates
+/* one row per relationship → prevents duplicates */
+friendSchema.index({ userId: 1, friendId: 1 }, { unique: true });
 
-const Friend = mongoose.model('Friend', friendSchema);
-export default Friend;
+export default mongoose.model('Friend', friendSchema);

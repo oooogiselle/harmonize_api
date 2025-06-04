@@ -5,6 +5,7 @@ import cors from 'cors';
 import session from 'cookie-session';
 import tilesRoutes from './routes/tiles.js';
 import friendsRoutes from './routes/friends.js';
+import usersRoutes   from './routes/users.js';
 import eventRoutes from './routes/events.js';
 import ticketmasterRoutes from './routes/ticketmaster.js';
 import geocodeRouter from './routes/geocode.js';
@@ -138,7 +139,7 @@ app.use('/api/users/:userId/tiles', (req, res, next) => {
 });
 
 app.use('/api/friends', friendsRoutes);
-
+app.use('/api/users',   usersRoutes);  
 
 
 /* ───────── Error handling ───────── */
