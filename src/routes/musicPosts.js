@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import MusicPost from '../models/MusicPost.js';
 import { getAccessToken } from '../spotifyClient.js';
 import { authenticateUser } from '../middleware/authMiddleware.js';
+import { findPreview } from 'spotify-preview-finder';
 
 const router = Router();
 
@@ -42,12 +43,60 @@ router.get('/spotify/search', async (req, res) => {
     }
 
     const data = await searchRes.json();
-    res.json(data.tracks.items);
+
+    // get tracks with preview URLs using spotify-preview-finder
+    const enhancedTracks = await Promise.all(
+      data.tracks.items.map(async (track) => {
+        // if Spotify doesn't provide a preview URL, try to find one
+        if (!track.preview_url) {
+          try {
+            console.log(`Finding preview for: ${track.name} by ${track.artists[0]?.name}`);
+            const previewData = await findPreview(track.name, track.artists[0]?.name);
+            
+            if (previewData && previewData.url) {
+              console.log(`Found preview URL: ${previewData.url}`);
+              track.preview_url = previewData.url;
+              track.preview_source = previewData.source; // add source info for debugging
+            } else {
+              console.log(`No preview found for: ${track.name}`);
+            }
+          } catch (error) {
+            console.error(`Error finding preview for ${track.name}:`, error.message);
+          }
+        }
+        return track;
+      })
+    );
+
+    res.json(enhancedTracks)
   } catch (err) {
     console.error('Spotify search error:', err);
     res.status(500).json({ error: 'Server error while searching Spotify' });
   }
 });
+
+// helper function to find preview URL
+const findPreviewUrl = async (title, artist) => {
+  try {
+    console.log(`Attempting to find preview for: "${title}" by "${artist}"`);
+    const previewData = await findPreview(title, artist);
+    
+    if (previewData && previewData.url) {
+      console.log(`Preview found from ${previewData.source}: ${previewData.url}`);
+      return {
+        url: previewData.url,
+        source: previewData.source
+      };
+    }
+    
+    console.log(`No preview found for: "${title}" by "${artist}"`);
+    return null;
+  } catch (error) {
+    console.error(`Error finding preview for "${title}" by "${artist}":`, error.message);
+    return null;
+  }
+};
+
 
 // POST a new music post (logged in user only)
 router.post('/', authenticateUser, async (req, res) => {
@@ -62,12 +111,14 @@ router.post('/', authenticateUser, async (req, res) => {
 
     // If track details are provided from frontend, use them
     if (title && artist) {
+      let finalPreviewUrl = previewUrl;
+
       postData = {
         spotifyTrackId,
         title,
         artist,
         coverUrl: coverUrl || '',
-        previewUrl: previewUrl || '',
+        previewUrl: finalPreviewUrl || '',
         duration: duration || null,
         caption: caption || '',
         genre: genre || '',
@@ -97,7 +148,7 @@ router.post('/', authenticateUser, async (req, res) => {
         title: trackData.name,
         artist: trackData.artists.map((a) => a.name).join(', '),
         coverUrl: trackData.album.images?.[0]?.url || '',
-        previewUrl: trackData.preview_url || '',
+        previewUrl: finalPreviewUrl || '',
         duration: trackData.duration_ms ? Math.floor(trackData.duration_ms / 1000) : null,
         caption: caption || '',
         genre: genre || '',
@@ -106,7 +157,7 @@ router.post('/', authenticateUser, async (req, res) => {
       };
     }
 
-    // Validate required fields
+    // validate required fields
     if (!postData.spotifyTrackId || !postData.title || !postData.artist) {
       return res.status(400).json({ error: 'Missing required track info' });
     }
@@ -114,7 +165,7 @@ router.post('/', authenticateUser, async (req, res) => {
     const musicPost = new MusicPost(postData);
     await musicPost.save();
 
-    // Populate the user info before sending response
+    // populate the user info before sending response
     await musicPost.populate('uploadedBy', 'displayName username');
 
     res.status(201).json(musicPost);

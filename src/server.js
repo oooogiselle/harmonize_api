@@ -18,8 +18,6 @@ import genreRoutes   from './routes/genres.js';
 import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
 import searchRoutes from './routes/search.js';
-import musicPostsRoutes from './routes/musicPosts.js';
-
 
 const {
   PORT = 8080,
