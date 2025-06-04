@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -11,10 +12,14 @@ import geocodeRouter from './routes/geocode.js';
 import authRoutes    from './routes/auth.js';
 import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
+import tilesRoutes from './routes/tiles.js';
 import meRoutes      from './routes/me.js';
 import genreRoutes   from './routes/genres.js';
+import searchRoutes from './routes/search.js';
+import musicPostsRoutes from './routes/musicPosts.js';
+import searchRoutes from './routes/search.js';
+import musicPostsRoutes from './routes/musicPosts.js';
 
-dotenv.config();
 
 const {
   PORT = 8080,
@@ -42,7 +47,18 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow non-browser requests
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://127.0.0.1:5173',
+      'http://localhost:5173', 
+      'http://localhost:3000',
+      'http://localhost:5174',
+      'https://localhost:8080',
+      FRONTEND
+    ];
+    
     if (allowedOrigins.includes(origin) || !isProduction) {
       callback(null, true);
     } else {
@@ -130,6 +146,8 @@ app.use('/',                  meRoutes);
 
 app.use('/api/geocode',       geocodeRouter);
 app.use('/api/tiles',         tilesRoutes);
+app.use('/api/search',        searchRoutes);
+app.use('/api/musicPosts',    musicPostsRoutes)
 
 // Specific user tiles route handler
 app.use('/api/users/:userId/tiles', (req, res, next) => {
