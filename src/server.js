@@ -119,7 +119,7 @@ app.get('/health', (req, res) => {
 
 /* ───────── Route setup ───────── */
 app.use('/auth',              authRoutes);
-app.use('/spotify',           spotifyRoutes);
+app.use('/api/spotify',           spotifyRoutes);
 app.use('/api/ticketmaster', ticketmasterRoutes);
 app.use('/artists',           artistRoutes);
 app.use('/events',            eventRoutes);

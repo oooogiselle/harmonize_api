@@ -54,4 +54,27 @@ router.get('/search', async (req, res) => {
   }
 });
 
+router.get('/top-artists', async (req, res) => {
+  try {
+    const token = await getAccessToken(); // Needs to be user token!
+    spotifyApi.setAccessToken(token);
+
+    const result = await spotifyApi.getMyTopArtists({ limit: 20 });
+
+    const topArtists = result.body.items.map((artist) => ({
+      name: artist.name,
+      images: artist.images,
+      genres: artist.genres,
+      popularity: artist.popularity,
+    }));
+
+    res.json({ items: topArtists });
+  } catch (err) {
+    console.error('Spotify top artists error:', err);
+    res.status(500).json({ error: 'Failed to fetch top artists' });
+  }
+});
+
+
+
 export default router;
