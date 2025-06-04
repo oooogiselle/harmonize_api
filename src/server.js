@@ -137,6 +137,9 @@ app.use('/api/users/:userId/tiles', (req, res, next) => {
   tilesRoutes(req, res, next);
 });
 
+app.use('/api/friends', friendsRoutes);
+
+
 
 /* ───────── Error handling ───────── */
 app.use((err, req, res, next) => {
