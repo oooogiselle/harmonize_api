@@ -52,4 +52,40 @@ router.get('/search', async (req, res) => {
   }
 });
 
+router.get('/top-artists', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    spotifyApi.setAccessToken(token);
+
+    const { time_range = 'medium_term', limit = 20 } = req.query;
+
+    const result = await spotifyApi.getMyTopArtists({
+      time_range,
+      limit: Math.min(Number(limit), 50),
+    });
+
+    const artists = result.body.items.map(artist => ({
+      id: artist.id,
+      name: artist.name,
+      images: artist.images,
+      image: artist.images?.[0]?.url || null,
+      genres: artist.genres,
+      popularity: artist.popularity,
+      followers: artist.followers?.total,
+      external_urls: artist.external_urls,
+    }));
+
+    res.json(artists);
+  } catch (err) {
+    console.error('Spotify top artists fetch failed:', err);
+    res.status(500).json({ error: 'Failed to fetch top artists' });
+  }
+});
+
+
 export default router;
