@@ -45,10 +45,6 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow non-browser requests
-/* ───────── CORS config (MOVED BEFORE SESSION) ───────── */
-const corsOptions = {
-  origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
