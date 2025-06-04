@@ -72,8 +72,11 @@ router.get('/top-artists', async (req, res) => {
 
     res.json({ items: topArtists });
   } catch (err) {
-    console.error('Spotify top artists error:', err);
-    res.status(500).json({ error: 'Failed to fetch top artists' });
+    console.error('Spotify top artists error:', err?.body || err);
+    res.status(500).json({
+      error: 'Failed to fetch top artists',
+      ...(process.env.NODE_ENV !== 'production' && { debug: err.message }),
+    });
   }
 });
 
