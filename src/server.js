@@ -18,8 +18,7 @@ import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
 import usersRoutes from './routes/users.js';
 
-
-
+const app = express(); 
 
 const {
   PORT = 8080,
@@ -28,8 +27,7 @@ const {
   NODE_ENV = 'development',
 } = process.env;
 
-// server.js - Fix the CORS allowedOrigins
-const FRONTEND = 'https://project-music-and-memories-umzm.onrender.com'; // This is correct
+const FRONTEND = 'https://project-music-and-memories-umzm.onrender.com';
 const isProduction = NODE_ENV === 'production';
 
 const allowedOrigins = [
@@ -37,15 +35,14 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5174',
-  'https://project-music-and-memories-umzm.onrender.com', // Add this exact URL
+  'https://project-music-and-memories-umzm.onrender.com',
   FRONTEND,
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    console.log('🔍 CORS Check - Incoming origin:', origin); // Add this for debugging
+    console.log('🔍 CORS Check - Incoming origin:', origin);
     
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.includes(origin) || !isProduction) {
