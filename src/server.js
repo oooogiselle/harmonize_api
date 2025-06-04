@@ -32,40 +32,42 @@ const app = express();
 /* ───────── Trust proxy for secure cookies ───────── */
 app.set('trust proxy', 1);
 
-/* ───────── CORS config ───────── */
-const allowedOrigins = [
-  'http://127.0.0.1:5173',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:5174',
-  FRONTEND,
-];
+/* ───────── SINGLE CORS middleware ───────── */
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      /* Allow server-to-server / Postman requests */
+      if (!origin) return cb(null, true);
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow non-browser requests
-    if (allowedOrigins.includes(origin) || !isProduction) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Cookie',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-  ],
-  exposedHeaders: ['Set-Cookie'],
-  optionsSuccessStatus: 200,
-};
+      const devWhitelist = [
+        'http://127.0.0.1:5173',
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'http://localhost:5174',
+      ];
 
-app.use(cors(corsOptions));
+      const allowed =
+        origin === FRONTEND ||
+        (!isProduction && devWhitelist.includes(origin));
+
+      if (allowed) return cb(null, true);
+      console.log('[CORS] Blocked:', origin);
+      return cb(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Cookie',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['Set-Cookie'],
+    optionsSuccessStatus: 200,
+  })
+);
 
 /* ───────── Session cookie configuration ───────── */
 app.use(
@@ -94,17 +96,6 @@ if (!isProduction) {
     next();
   });
 }
-
-/* ───────── CORS setup ───────── */
-app.use(cors({
-  origin: [
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://localhost:5173',
-    'https://project-music-and-memories.onrender.com',
-  ],
-  credentials: true,
-}));
 
 /* ───────── Health check endpoint ───────── */
 app.get('/health', (req, res) => {
@@ -179,8 +170,7 @@ mongoose
 app.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`);
   console.log(`📍 Environment: ${NODE_ENV}`);
-  console.log(`🔗 Frontend: ${FRONTEND}`);
-  console.log(`🌐 CORS allow-list:`, allowedOrigins);
+  console.log(`🔗 Frontend origin: ${FRONTEND}`);
 });
 
 /* ───────── Graceful shutdown ───────── */
