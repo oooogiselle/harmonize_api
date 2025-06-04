@@ -74,18 +74,12 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
     if (!user) return res.status(404).json({ msg: 'User not found' });
 
-    const [followers, following] = await Promise.all([
-      Friend.countDocuments({ friendId: id }),
-      Friend.countDocuments({ userId: id }),
-    ]);
+    const followers = user.followers?.length || 0;
+    const following = user.following?.length || 0;
 
-    let isFollowing = false;
-    if (req.session?.userId) {
-      isFollowing = !!(await Friend.exists({
-        userId: req.session.userId,
-        friendId: id,
-      }));
-    }
+    const isFollowing =
+      req.session?.userId &&
+      user.followers?.some((uid) => uid.toString() === req.session.userId);
 
     res.json({
       ...user.toObject(),

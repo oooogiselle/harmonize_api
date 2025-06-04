@@ -9,7 +9,6 @@ const friendSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/* one row per relationship → prevents duplicates */
 friendSchema.index({ userId: 1, friendId: 1 }, { unique: true });
 
 export default mongoose.model('Friend', friendSchema);
