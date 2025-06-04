@@ -7,27 +7,25 @@ const router = express.Router();
 /* ─────────── /spotify/search?q=&type= ─────────── */
 router.get('/search', async (req, res) => {
   try {
-    const { q, type = 'artist' } = req.query; // Default to 'artist' if no type specified
+    const { q, type = 'artist' } = req.query;
     if (!q) return res.status(400).json({ error: 'Missing search query' });
 
-    // Use app credentials flow
     const token = await getAccessToken();
     spotifyApi.setAccessToken(token);
 
     const result = await spotifyApi.search(q, [type]);
 
-    // For backwards compatibility with SearchResults.jsx, return array format for artists
     if (type === 'artist') {
       const artists = result.body.artists.items.map(artist => ({
         id: artist.id,
         name: artist.name,
-        images: artist.images, // Keep the original images array
-        image: artist.images?.[0]?.url || null, // Also provide direct image field
+        images: artist.images, // Make sure to include the full images array
+        image: artist.images?.[0]?.url || null,
         genres: artist.genres,
         popularity: artist.popularity,
         followers: artist.followers?.total
       }));
-      return res.json(artists); // Return array directly for SearchResults.jsx
+      return res.json(artists);
     }
 
     if (type === 'track') {
@@ -38,13 +36,13 @@ router.get('/search', async (req, res) => {
         album: {
           id: track.album.id,
           name: track.album.name,
-          images: track.album.images, // Keep the original images array
-          image: track.album.images?.[0]?.url || null // Also provide direct image field
+          images: track.album.images, // Make sure to include the full images array
+          image: track.album.images?.[0]?.url || null
         },
         preview_url: track.preview_url,
         popularity: track.popularity
       }));
-      return res.json({ tracks }); // Return object format for other uses
+      return res.json({ tracks });
     }
 
     res.status(400).json({ error: 'Unsupported search type' });
