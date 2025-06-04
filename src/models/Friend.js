@@ -2,22 +2,12 @@
 import mongoose from 'mongoose';
 
 const friendSchema = new mongoose.Schema({
-  userName: String,
-  displayName: { type: String, required: true },
-  location: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number], // [lng, lat]
-      required: true
-    }
-  }
+  userId: { type: String, required: true },        // the one who is following
+  friendId: { type: String, required: true },      // the one being followed
+  createdAt: { type: Date, default: Date.now },
 });
 
-friendSchema.index({ location: '2dsphere' }); // for geo queries
+friendSchema.index({ userId: 1, friendId: 1 }, { unique: true }); // prevent duplicates
 
 const Friend = mongoose.model('Friend', friendSchema);
 export default Friend;
