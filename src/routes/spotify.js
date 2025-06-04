@@ -54,8 +54,10 @@ router.get('/search', async (req, res) => {
 
 router.get('/top-artists', async (req, res) => {
   try {
-    const token = req.session?.spotifyAccessToken;
-    if (!token) return res.status(401).json({ error: 'Not authenticated with Spotify' });
+    const authHeader = req.get('Authorization');
+    const token = authHeader?.split(' ')[1]; // "Bearer <token>"
+
+    if (!token) return res.status(401).json({ error: 'Missing Spotify token' });
 
     spotifyApi.setAccessToken(token);
 
