@@ -28,42 +28,32 @@ const {
   NODE_ENV = 'development',
 } = process.env;
 
-const FRONTEND = 'https://project-music-and-memories-umzm.onrender.com';
+// server.js - Fix the CORS allowedOrigins
+const FRONTEND = 'https://project-music-and-memories-umzm.onrender.com'; // This is correct
 const isProduction = NODE_ENV === 'production';
 
-const app = express();
-
-/* ───────── Trust proxy for secure cookies ───────── */
-app.set('trust proxy', 1);
-app.use('/api/users', usersRoutes);
-
-/* ───────── CORS config ───────── */
 const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5174',
+  'https://project-music-and-memories-umzm.onrender.com', // Add this exact URL
   FRONTEND,
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
+    console.log('🔍 CORS Check - Incoming origin:', origin); // Add this for debugging
+    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = [
-      'http://127.0.0.1:5173',
-      'http://localhost:5173', 
-      'http://localhost:3000',
-      'http://localhost:5174',
-      'https://localhost:8080',
-      FRONTEND
-    ];
-    
     if (allowedOrigins.includes(origin) || !isProduction) {
+      console.log('✅ CORS - Origin allowed:', origin);
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
+      console.log('❌ CORS - Origin blocked:', origin);
+      console.log('📋 CORS - Allowed origins:', allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -82,6 +72,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
 
 /* ───────── Session cookie configuration ───────── */
 app.use(
@@ -111,16 +102,6 @@ if (!isProduction) {
   });
 }
 
-/* ───────── CORS setup ───────── */
-app.use(cors({
-  origin: [
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://localhost:5173',
-    'https://project-music-and-memories.onrender.com',
-  ],
-  credentials: true,
-}));
 
 /* ───────── Health check endpoint ───────── */
 app.get('/health', (req, res) => {
