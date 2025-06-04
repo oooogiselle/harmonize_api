@@ -58,8 +58,9 @@ router.get('/spotify/search', async (req, res) => {
             if (previewResult.success && previewResult.results.length > 0) {
               const firstResult = previewResult.results[0];
               if (firstResult.previewUrls && firstResult.previewUrls.length > 0) {
-                console.log(`Found preview URL: ${previewData.url}`);
-                track.preview_url = previewData.url;
+                const previewUrl = firstResult.previewUrls[0];
+                console.log(`Found preview URL: ${previewUrl}`);
+                track.preview_url = previewUrl;
                 track.preview_source = 'spotify-preview-finder';
               } else {
                 console.log(`No preview URLs found for: ${track.name}`);
@@ -75,7 +76,7 @@ router.get('/spotify/search', async (req, res) => {
       })
     );
 
-    res.json(enhancedTracks)
+    res.json(enhancedTracks);
   } catch (err) {
     console.error('Spotify search error:', err);
     res.status(500).json({ error: 'Server error while searching Spotify' });
@@ -93,9 +94,10 @@ const findPreviewUrl = async (title, artist) => {
     if (previewResult.success && previewResult.results.length > 0) {
       const firstResult = previewResult.results[0];
       if (firstResult.previewUrls && firstResult.previewUrls.length > 0) {
-        console.log(`Preview found: ${firstResult.previewUrls[0]}`);
+        const previewUrl = firstResult.previewUrls[0];
+        console.log(`Preview found: ${previewUrl}`);
         return {
-          url: firstResult.previewUrls[0],
+          url: previewUrl,
           source: 'spotify-preview-finder',
           spotifyUrl: firstResult.spotifyUrl
         };
@@ -109,7 +111,6 @@ const findPreviewUrl = async (title, artist) => {
     return null;
   }
 };
-
 
 // POST a new music post (logged in user only)
 router.post('/', authenticateUser, async (req, res) => {
@@ -163,6 +164,14 @@ router.post('/', authenticateUser, async (req, res) => {
       const trackData = await trackRes.json();
       console.log('Track data:', trackData);
 
+      // Try to find preview URL if not provided by Spotify
+      let finalPreviewUrl = trackData.preview_url;
+      if (!finalPreviewUrl) {
+        console.log('No preview URL from Spotify, attempting to find one...');
+        const previewData = await findPreviewUrl(trackData.name, trackData.artists.map((a) => a.name).join(', '));
+        finalPreviewUrl = previewData?.url || '';
+      }
+
       postData = {
         spotifyTrackId,
         title: trackData.name,
@@ -196,7 +205,7 @@ router.post('/', authenticateUser, async (req, res) => {
 });
 
 // LIKE a music post (requires authentication)
-router.post('/:id/like', async (req, res) => {
+router.post('/:id/like', authenticateUser, async (req, res) => {
   const userId = req.user._id;
 
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -221,7 +230,7 @@ router.post('/:id/like', async (req, res) => {
 });
 
 // UNLIKE a music post (requires authentication)
-router.post('/:id/unlike', async (req, res) => {
+router.post('/:id/unlike', authenticateUser, async (req, res) => {
   const userId = req.user._id;
 
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
