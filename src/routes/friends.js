@@ -1,5 +1,9 @@
+import { Router } from 'express';
 import Friend from '../models/Friend.js';
 import User   from '../models/User.js';
+import { requireAuth } from './auth.js';
+
+const router = Router();
 
  router.post('/follow/:friendId', requireAuth, async (req, res) => {
    const userId   = req.session.userId;
@@ -61,3 +65,5 @@ import User   from '../models/User.js';
      res.status(500).json({ message: 'Failed to unfollow', error: err.message });
    }
  });
+ 
+ export default router;
