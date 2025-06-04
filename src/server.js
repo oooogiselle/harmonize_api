@@ -12,13 +12,11 @@ import geocodeRouter from './routes/geocode.js';
 import authRoutes    from './routes/auth.js';
 import spotifyRoutes from './routes/spotify.js';
 import artistRoutes  from './routes/artists.js';
-import tilesRoutes from './routes/tiles.js';
 import meRoutes      from './routes/me.js';
 import genreRoutes   from './routes/genres.js';
 import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
-import searchRoutes from './routes/search.js';
-import musicPostsRoutes from './routes/musicPosts.js';
+
 
 
 const {
