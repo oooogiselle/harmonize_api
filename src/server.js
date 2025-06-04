@@ -43,6 +43,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     console.log('🔍 CORS Check - Incoming origin:', origin);
     
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.includes(origin) || !isProduction) {
@@ -66,9 +67,13 @@ const corsOptions = {
   ],
   exposedHeaders: ['Set-Cookie'],
   optionsSuccessStatus: 200,
+  preflightContinue: false,
+  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
+
+app.options('*', cors(corsOptions));
 
 
 /* ───────── Session cookie configuration ───────── */

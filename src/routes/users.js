@@ -53,21 +53,21 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// NEW ROUTES FOR BLEND FEATURE
 
 // Search users (excluding current user)
 router.get('/search', requireAuth, async (req, res) => {
   try {
+    console.log('[USERS] Search request received');
     const { q = '' } = req.query;
     const currentUserId = req.session.userId;
 
-    console.log('[USERS] Search request - query:', q, 'currentUser:', currentUserId);
+    console.log('[USERS] Search query:', q, 'Current user:', currentUserId);
 
     let query = {
       _id: { $ne: currentUserId }, // Exclude current user
-      spotifyId: { $exists: true, $ne: null }, // Only users with Spotify connected
     };
 
+    // Add search criteria if query provided
     if (q.trim()) {
       query.$or = [
         { displayName: { $regex: q, $options: 'i' } },
@@ -76,7 +76,7 @@ router.get('/search', requireAuth, async (req, res) => {
     }
 
     const users = await User.find(query)
-      .select('displayName username avatar')
+      .select('displayName username spotifyId')
       .limit(20);
 
     console.log('[USERS] Found users:', users.length);
