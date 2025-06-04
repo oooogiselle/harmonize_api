@@ -54,7 +54,9 @@ router.get('/search', async (req, res) => {
 
 router.get('/top-artists', async (req, res) => {
   try {
-    const token = await getAccessToken(); // Needs to be user token!
+    const token = req.session?.spotifyAccessToken;
+    if (!token) return res.status(401).json({ error: 'Not authenticated with Spotify' });
+
     spotifyApi.setAccessToken(token);
 
     const result = await spotifyApi.getMyTopArtists({ limit: 20 });
@@ -72,7 +74,6 @@ router.get('/top-artists', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch top artists' });
   }
 });
-
 
 
 export default router;
