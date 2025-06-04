@@ -61,6 +61,8 @@ router.get('/search', requireAuth, async (req, res) => {
     const { q = '' } = req.query;
     const currentUserId = req.session.userId;
 
+    console.log('[USERS] Search request - query:', q, 'currentUser:', currentUserId);
+
     let query = {
       _id: { $ne: currentUserId }, // Exclude current user
       spotifyId: { $exists: true, $ne: null }, // Only users with Spotify connected
@@ -77,9 +79,10 @@ router.get('/search', requireAuth, async (req, res) => {
       .select('displayName username avatar')
       .limit(20);
 
+    console.log('[USERS] Found users:', users.length);
     res.json(users);
   } catch (err) {
-    console.error('Error searching users:', err);
+    console.error('[USERS] Error searching users:', err);
     res.status(500).json({ error: 'Failed to search users' });
   }
 });

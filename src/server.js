@@ -118,16 +118,13 @@ app.use('/spotify',           spotifyRoutes);
 app.use('/api/ticketmaster', ticketmasterRoutes);
 app.use('/artists',           artistRoutes);
 app.use('/events',            eventRoutes);
-
-// Ensure genre routes are mounted before meRoutes
 app.use('/',                  genreRoutes);
 app.use('/',                  meRoutes);
-
 app.use('/api/geocode',       geocodeRouter);
 app.use('/api/tiles',         tilesRoutes);
 app.use('/api/search',        searchRoutes);
-app.use('/api/musicPosts',    musicPostsRoutes)
-
+app.use('/api/musicPosts',    musicPostsRoutes);
+app.use('/api/users',         usersRoutes);
 // Specific user tiles route handler
 app.use('/api/users/:userId/tiles', (req, res, next) => {
   req.url = `/user/${req.params.userId}`;
