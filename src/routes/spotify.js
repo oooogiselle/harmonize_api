@@ -1,6 +1,7 @@
 import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
-import { getAccessToken, spotifyApi } from '../spotifyClient.js';
+import User from '../models/User.js';
+import { getUserSpotifyClient } from '../spotifyClient.js';
 
 const router = express.Router();
 
@@ -54,17 +55,21 @@ router.get('/search', async (req, res) => {
 
 router.get('/top-artists', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const token = authHeader.split(' ')[1];
-    spotifyApi.setAccessToken(token);
+    const user = await User.findById(req.session.userId);
+    if (!user || !user.spotifyAccessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
 
+    // Get user's Spotify client with token refresh
+    const spotify = await getUserSpotifyClient(user);
+    
     const { time_range = 'medium_term', limit = 20 } = req.query;
 
-    const result = await spotifyApi.getMyTopArtists({
+    const result = await spotify.getMyTopArtists({
       time_range,
       limit: Math.min(Number(limit), 50),
     });
@@ -80,7 +85,7 @@ router.get('/top-artists', async (req, res) => {
       external_urls: artist.external_urls,
     }));
 
-    res.json(artists);
+    res.json({ items: artists }); 
   } catch (err) {
     console.error('Spotify top artists fetch failed:', err);
     res.status(500).json({ error: 'Failed to fetch top artists' });
