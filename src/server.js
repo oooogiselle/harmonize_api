@@ -16,6 +16,8 @@ import meRoutes      from './routes/me.js';
 import genreRoutes   from './routes/genres.js';
 import searchRoutes from './routes/search.js';
 import musicPostsRoutes from './routes/musicPosts.js';
+import usersRoutes from './routes/users.js';
+
 
 
 
@@ -33,6 +35,7 @@ const app = express();
 
 /* ───────── Trust proxy for secure cookies ───────── */
 app.set('trust proxy', 1);
+app.use('/api/users', usersRoutes);
 
 /* ───────── CORS config ───────── */
 const allowedOrigins = [
