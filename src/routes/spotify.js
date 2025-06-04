@@ -55,14 +55,17 @@ router.get('/search', async (req, res) => {
 router.get('/top-artists', async (req, res) => {
   try {
     const authHeader = req.get('Authorization');
-    const token = authHeader?.split(' ')[1]; // "Bearer <token>"
-
+    const token = authHeader?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Missing Spotify token' });
 
-    spotifyApi.setAccessToken(token);
+    // 🔍 Find the user by access token
+    const user = await User.findOne({ spotifyAccessToken: token });
+    if (!user) return res.status(401).json({ error: 'User not found for this token' });
 
-    const result = await spotifyApi.getMyTopArtists({ limit: 20 });
+    // 🔁 Get Spotify client, auto-refreshing if needed
+    const client = await getUserSpotifyClient(user);
 
+    const result = await client.getMyTopArtists({ limit: 20 });
     const topArtists = result.body.items.map((artist) => ({
       name: artist.name,
       images: artist.images,
@@ -73,10 +76,7 @@ router.get('/top-artists', async (req, res) => {
     res.json({ items: topArtists });
   } catch (err) {
     console.error('Spotify top artists error:', err?.body || err);
-    res.status(500).json({
-      error: 'Failed to fetch top artists',
-      ...(process.env.NODE_ENV !== 'production' && { debug: err.message }),
-    });
+    res.status(500).json({ error: 'Failed to fetch top artists' });
   }
 });
 
