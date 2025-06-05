@@ -114,5 +114,31 @@ router.get('/top-artists', async (req, res) => {
   }
 });
 
+// ─────────── GET Spotify data for a friend by userId ───────────
+router.get('/user/:id', async (req, res) => {
+  try {
+    const friend = await User.findById(req.params.id);
+    if (!friend || !friend.spotifyAccessToken || !friend.spotifyRefreshToken) {
+      return res.status(404).json({ error: 'Spotify not connected for this user' });
+    }
+
+    const spotify = await getUserSpotifyClient(friend);
+
+    const [topTracks, topArtists] = await Promise.all([
+      spotify.getMyTopTracks({ limit: 10, time_range: 'medium_term' }),
+      spotify.getMyTopArtists({ limit: 10, time_range: 'medium_term' }),
+    ]);
+
+    res.json({
+      topTracks: topTracks.body.items,
+      topArtists: topArtists.body.items,
+    });
+  } catch (err) {
+    console.error('[SPOTIFY] Error fetching user data:', err);
+    res.status(500).json({ error: 'Failed to fetch user Spotify data' });
+  }
+});
+
+
 
 export default router;
