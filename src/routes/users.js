@@ -35,67 +35,101 @@ router.get('/search', requireAuth, async (req, res) => {
 });
 
 /* ─────────────────────────────── */
-/*  FOLLOW / UNFOLLOW              */
+/*  FOLLOW / UNFOLLOW - FIXED      */
 /* ─────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) {
-    return res.status(400).json({ error: 'Cannot follow yourself' });
-  }
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const current = await User.findByIdAndUpdate(
-      req.user.id,
-      { $addToSet: { following: req.params.id } },
-      { new: true, session }
-    ).select('_id username displayName avatar following followers');
+    const currentUserId = req.user?.id || req.session?.userId;
+    const targetUserId = req.params.id;
 
-    const target = await User.findByIdAndUpdate(
-      req.params.id,
-      { $addToSet: { followers: req.user.id } },
-      { new: true, session }
-    ).select('_id username displayName avatar following followers');
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
 
-    await session.commitTransaction();
-    res.status(201).json({ current, target });
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot follow yourself' });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const current = await User.findByIdAndUpdate(
+        currentUserId,
+        { $addToSet: { following: targetUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      const target = await User.findByIdAndUpdate(
+        targetUserId,
+        { $addToSet: { followers: currentUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      if (!current || !target) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await session.commitTransaction();
+      res.status(201).json({ current, target });
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   } catch (err) {
-    await session.abortTransaction();
+    console.error('[USERS] Follow error:', err);
     next(err);
-  } finally {
-    session.endSession();
   }
 });
 
 router.delete('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) {
-    return res.status(400).json({ error: 'Cannot unfollow yourself' });
-  }
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const current = await User.findByIdAndUpdate(
-      req.user.id,
-      { $pull: { following: req.params.id } },
-      { new: true, session }
-    ).select('_id username displayName avatar following followers');
+    const currentUserId = req.user?.id || req.session?.userId;
+    const targetUserId = req.params.id;
 
-    const target = await User.findByIdAndUpdate(
-      req.params.id,
-      { $pull: { followers: req.user.id } },
-      { new: true, session }
-    ).select('_id username displayName avatar following followers');
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
 
-    await session.commitTransaction();
-    res.json({ current, target });
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot unfollow yourself' });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const current = await User.findByIdAndUpdate(
+        currentUserId,
+        { $pull: { following: targetUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      const target = await User.findByIdAndUpdate(
+        targetUserId,
+        { $pull: { followers: currentUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      if (!current || !target) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await session.commitTransaction();
+      res.json({ current, target });
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   } catch (err) {
-    await session.abortTransaction();
+    console.error('[USERS] Unfollow error:', err);
     next(err);
-  } finally {
-    session.endSession();
   }
 });
 
@@ -103,48 +137,24 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 /*  FOLLOWING & FOLLOWERS LIST     */
 /* ─────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('following', '_id username displayName avatar');
-  res.json(user?.following ?? []);
+  try {
+    const user = await User.findById(req.params.id)
+      .populate('following', '_id username displayName avatar');
+    res.json(user?.following ?? []);
+  } catch (err) {
+    console.error('[USERS] Following list error:', err);
+    res.status(500).json({ error: 'Failed to fetch following list' });
+  }
 });
 
 router.get('/:id/followers', requireAuth, async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('followers', '_id username displayName avatar');
-  res.json(user?.followers ?? []);
-});
-
-/* ─────────────────────────────── */
-/*  SPOTIFY TOP ARTISTS            */
-/* ─────────────────────────────── */
-router.get('/:userId/top-artists', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.params;
-    const user = await User.findById(userId);
-    if (!user || !user.spotifyAccessToken) {
-      return res.status(404).json({ error: 'User not found or Spotify not connected' });
-    }
-
-    const { getUserSpotifyClient } = await import('../spotifyClient.js');
-    const spotify = await getUserSpotifyClient(user);
-
-    const result = await spotify.getMyTopArtists({
-      time_range: 'medium_term',
-      limit: 20,
-    });
-
-    const artists = result.body.items.map((artist) => ({
-      id: artist.id,
-      name: artist.name,
-      images: artist.images,
-      genres: artist.genres,
-      popularity: artist.popularity,
-    }));
-
-    res.json({ items: artists });
+    const user = await User.findById(req.params.id)
+      .populate('followers', '_id username displayName avatar');
+    res.json(user?.followers ?? []);
   } catch (err) {
-    console.error('[SPOTIFY] Top Artists error:', err);
-    res.status(500).json({ error: 'Failed to fetch user top artists' });
+    console.error('[USERS] Followers list error:', err);
+    res.status(500).json({ error: 'Failed to fetch followers list' });
   }
 });
 
@@ -152,8 +162,13 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
 /*  BASIC USER ROUTES              */
 /* ─────────────────────────────── */
 router.get('/', async (req, res) => {
-  const users = await User.find().select('-passwordHash');
-  res.json(users);
+  try {
+    const users = await User.find().select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
+    res.json(users);
+  } catch (err) {
+    console.error('[USERS] List error:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
 });
 
 router.post('/', async (req, res) => {
@@ -193,12 +208,13 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
-// FIXED: Remove problematic populate for favoriteTracks
+// User profile route - no Spotify dependencies
 router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .populate('following', 'username displayName avatar')
-      .populate('followers', 'username displayName avatar');
+      .populate('followers', 'username displayName avatar')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken'); // Hide sensitive data
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
