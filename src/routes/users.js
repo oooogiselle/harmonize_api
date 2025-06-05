@@ -193,10 +193,10 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
+// FIXED: Remove problematic populate for favoriteTracks
 router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('favoriteTracks', 'title')
       .populate('following', 'username displayName avatar')
       .populate('followers', 'username displayName avatar');
 
