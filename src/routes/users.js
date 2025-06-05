@@ -5,9 +5,9 @@ import { requireAuth } from './auth.js';
 
 const router = Router();
 
-/* ────────────────────────────────────────────────────────── */
-/*  SEARCH USERS (excludes you)                               */
-/* ────────────────────────────────────────────────────────── */
+/* ─────────────────────────────── */
+/*  SEARCH USERS (excludes self)   */
+/* ─────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
   try {
     const { q = '' } = req.query;
@@ -34,9 +34,9 @@ router.get('/search', requireAuth, async (req, res) => {
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  FOLLOW / UNFOLLOW                                         */
-/* ────────────────────────────────────────────────────────── */
+/* ─────────────────────────────── */
+/*  FOLLOW / UNFOLLOW              */
+/* ─────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   if (req.user.id === req.params.id) {
     return res.status(400).json({ error: 'Cannot follow yourself' });
@@ -44,6 +44,7 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
 
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const current = await User.findByIdAndUpdate(
       req.user.id,
@@ -74,6 +75,7 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const current = await User.findByIdAndUpdate(
       req.user.id,
@@ -97,9 +99,9 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  FOLLOWERS AND FOLLOWING HELPERS                           */
-/* ────────────────────────────────────────────────────────── */
+/* ─────────────────────────────── */
+/*  FOLLOWING & FOLLOWERS LIST     */
+/* ─────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   const user = await User.findById(req.params.id)
     .populate('following', '_id username displayName avatar');
@@ -112,9 +114,9 @@ router.get('/:id/followers', requireAuth, async (req, res) => {
   res.json(user?.followers ?? []);
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  SPOTIFY TOP ARTISTS                                       */
-/* ────────────────────────────────────────────────────────── */
+/* ─────────────────────────────── */
+/*  SPOTIFY TOP ARTISTS            */
+/* ─────────────────────────────── */
 router.get('/:userId/top-artists', requireAuth, async (req, res) => {
   try {
     const { userId } = req.params;
@@ -131,7 +133,7 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
       limit: 20,
     });
 
-    const artists = result.body.items.map(artist => ({
+    const artists = result.body.items.map((artist) => ({
       id: artist.id,
       name: artist.name,
       images: artist.images,
@@ -141,33 +143,41 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
 
     res.json({ items: artists });
   } catch (err) {
-    console.error('Error fetching top artists:', err);
+    console.error('[SPOTIFY] Top Artists error:', err);
     res.status(500).json({ error: 'Failed to fetch user top artists' });
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  GENERAL USER ROUTES                                       */
-/* ────────────────────────────────────────────────────────── */
-
-// Get all users
+/* ─────────────────────────────── */
+/*  BASIC USER ROUTES              */
+/* ─────────────────────────────── */
 router.get('/', async (req, res) => {
   const users = await User.find().select('-passwordHash');
   res.json(users);
 });
 
-// Create new user
 router.post('/', async (req, res) => {
   try {
     const newUser = await User.create(req.body);
     res.status(201).json(newUser);
   } catch (err) {
-    console.error('Create user error:', err);
-    res.status(400).json({ msg: 'Failed to create user', err });
+    console.error('[USERS] Creation error:', err);
+    res.status(400).json({ error: 'Failed to create user' });
   }
 });
 
-// Add favorite track (must come BEFORE `/:id`)
+router.patch('/:id', async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    res.json(user);
+  } catch (err) {
+    console.error('[USERS] Update error:', err);
+    res.status(400).json({ error: 'Failed to update user' });
+  }
+});
+
 router.patch('/:id/favorite', async (req, res) => {
   const { trackId } = req.body;
   try {
@@ -178,34 +188,26 @@ router.patch('/:id/favorite', async (req, res) => {
     );
     res.json(user);
   } catch (err) {
-    res.status(400).json({ msg: 'Failed to add favorite track', err });
+    console.error('[USERS] Favorite update error:', err);
+    res.status(400).json({ error: 'Failed to add favorite track' });
   }
 });
 
-// Get user by ID – keep this last
 router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('favoriteTracks', 'title');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    console.error('[USERS] Error fetching user profile:', err);
-    res.status(500).json({ error: 'Failed to fetch user profile' });
-  }
-});
+      .populate('favoriteTracks', 'title')
+      .populate('following', 'username displayName avatar')
+      .populate('followers', 'username displayName avatar');
 
-// Update user
-router.patch('/:id', async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     res.json(user);
   } catch (err) {
-    res.status(400).json({ msg: 'Failed to update user', err });
+    console.error('[USERS] Profile fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
 
