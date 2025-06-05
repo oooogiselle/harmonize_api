@@ -188,10 +188,20 @@ router.patch('/:id/favorite', async (req, res) => {
 
 // Get user by ID – keep this last
 router.get('/:id', async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('favoriteTracks', 'title')
-    .populate('friends', 'username');
-  res.json(user);
+  try {
+    const user = await User.findById(req.params.id)
+      .populate('favoriteTracks', 'title')
+      .populate('friends', 'username');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error('[USERS] Error fetching user profile:', err);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
 });
 
 // Update user
