@@ -19,7 +19,6 @@ import meRoutes            from './routes/me.js';
 import genreRoutes         from './routes/genres.js';
 import searchRoutes        from './routes/search.js';
 import musicPostsRoutes    from './routes/musicPosts.js';
-import friendsRoutes       from './routes/friends.js';  // if still used
 
 const app = express();
 
@@ -129,7 +128,6 @@ app.use('/api/tiles',         tilesRoutes);
 app.use('/api/search',        searchRoutes);
 app.use('/api/musicPosts',    musicPostsRoutes);
 app.use('/api/users',         usersRoutes);
-app.use('/api/friends',       usersRoutes); // Alias for compatibility
 
 // Special case: nested user tiles
 app.use('/api/users/:userId/tiles', (req, res, next) => {
