@@ -187,17 +187,11 @@ router.patch('/:id/favorite', async (req, res) => {
 });
 
 // 🛠️ FIXED: Get user by ID with validation and safe population
+// Get user by ID – keep this last
 router.get('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ error: 'Invalid user ID' });
-  }
-
   try {
-    const user = await User.findById(id)
-      .populate('favoriteTracks', 'title')
-      .populate('friends', 'username');
+    const user = await User.findById(req.params.id)
+      .populate('favoriteTracks', 'title'); // Removed .populate('friends', ...)
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
