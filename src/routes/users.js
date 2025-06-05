@@ -1,8 +1,7 @@
-// routes/users.js
-import { Router }   from 'express';
-import mongoose     from 'mongoose';
-import User         from '../models/User.js';
-import { requireAuth } from './auth.js';   // assumes this sets req.user / req.session
+import { Router } from 'express';
+import mongoose from 'mongoose';
+import User from '../models/User.js';
+import { requireAuth } from './auth.js';
 
 const router = Router();
 
@@ -11,23 +10,27 @@ const router = Router();
 /* ────────────────────────────────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
   try {
+    console.log('[USERS] Search request received');
     const { q = '' } = req.query;
-    const currentUserId = req.user?.id || req.session?.userId;   // whichever you store
+    const currentUserId = req.user?.id || req.session?.userId;
+
+    console.log('[USERS] Search query:', q, 'Current user:', currentUserId);
 
     const query = {
-      _id: { $ne: currentUserId },   // never show me
+      _id: { $ne: currentUserId },
       ...(q.trim() && {
         $or: [
           { displayName: { $regex: q, $options: 'i' } },
-          { username:    { $regex: q, $options: 'i' } },
+          { username: { $regex: q, $options: 'i' } },
         ],
       }),
     };
 
     const users = await User.find(query)
-      .select('_id username displayName avatar')  // avatar is handy for dropdown
+      .select('displayName username avatar spotifyId')
       .limit(20);
 
+    console.log('[USERS] Found users:', users.length);
     res.json(users);
   } catch (err) {
     console.error('[USERS] Error searching users:', err);
@@ -37,11 +40,11 @@ router.get('/search', requireAuth, async (req, res) => {
 
 /* ────────────────────────────────────────────────────────── */
 /*  FOLLOW / UNFOLLOW                                         */
-/*    POST   /api/users/:id/follow     (follow)               */
-/*    DELETE /api/users/:id/follow     (unfollow)             */
 /* ────────────────────────────────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) return res.status(400).json({ error: 'Cannot follow yourself' });
+  if (req.user.id === req.params.id) {
+    return res.status(400).json({ error: 'Cannot follow yourself' });
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -69,7 +72,9 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
 });
 
 router.delete('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) return res.status(400).json({ error: 'Cannot unfollow yourself' });
+  if (req.user.id === req.params.id) {
+    return res.status(400).json({ error: 'Cannot unfollow yourself' });
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -96,23 +101,23 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
   }
 });
 
-/* OPTIONAL helpers – convenient for the Friends page
-   GET /api/users/:id/following
-   GET /api/users/:id/followers                                         */
+/* ────────────────────────────────────────────────────────── */
+/*  FOLLOWERS AND FOLLOWING HELPERS                           */
+/* ────────────────────────────────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   const user = await User.findById(req.params.id)
-                         .populate('following', '_id username displayName avatar');
+    .populate('following', '_id username displayName avatar');
   res.json(user?.following ?? []);
 });
 
 router.get('/:id/followers', requireAuth, async (req, res) => {
   const user = await User.findById(req.params.id)
-                         .populate('followers', '_id username displayName avatar');
+    .populate('followers', '_id username displayName avatar');
   res.json(user?.followers ?? []);
 });
 
 /* ────────────────────────────────────────────────────────── */
-/*  SPOTIFY TOP ARTISTS (kept as-is, but moved below search)  */
+/*  SPOTIFY TOP ARTISTS                                       */
 /* ────────────────────────────────────────────────────────── */
 router.get('/:userId/top-artists', requireAuth, async (req, res) => {
   try {
@@ -125,13 +130,17 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
     const { getUserSpotifyClient } = await import('../spotifyClient.js');
     const spotify = await getUserSpotifyClient(user);
 
-    const result = await spotify.getMyTopArtists({ time_range: 'medium_term', limit: 20 });
-    const artists = result.body.items.map(a => ({
-      id:    a.id,
-      name:  a.name,
-      images:a.images,
-      genres:a.genres,
-      popularity:a.popularity,
+    const result = await spotify.getMyTopArtists({
+      time_range: 'medium_term',
+      limit: 20,
+    });
+
+    const artists = result.body.items.map(artist => ({
+      id: artist.id,
+      name: artist.name,
+      images: artist.images,
+      genres: artist.genres,
+      popularity: artist.popularity,
     }));
 
     res.json({ items: artists });
@@ -142,7 +151,7 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
 });
 
 /* ────────────────────────────────────────────────────────── */
-/*  GENERAL CRUD ROUTES (unchanged from your original)        */
+/*  GENERAL USER ROUTES                                       */
 /* ────────────────────────────────────────────────────────── */
 
 // Get all users
@@ -177,11 +186,11 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
-// Get user by ID  (keep this LAST of all “/:param” routes)
+// Get user by ID – keep this last
 router.get('/:id', async (req, res) => {
   const user = await User.findById(req.params.id)
     .populate('favoriteTracks', 'title')
-    .populate('friends',        'username');   // if you still store `friends`
+    .populate('friends', 'username');
   res.json(user);
 });
 
