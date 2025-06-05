@@ -31,62 +31,51 @@ const {
   FRONTEND_URL,
 } = process.env;
 
-const FRONTEND     = FRONTEND_URL || 'https://project-music-and-memories-umzm.onrender.com';
+const FRONTEND = FRONTEND_URL || 'https://project-music-and-memories-umzm.onrender.com';
 const isProduction = NODE_ENV === 'production';
 
 /* ───────── CORS ───────── */
-const allowedOrigins = [
+const allowedOrigins = new Set([
   'http://127.0.0.1:5173',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5174',
   'https://project-music-and-memories-umzm.onrender.com',
   FRONTEND,
-];
+]);
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    console.log('🔍 CORS Check - Incoming origin:', origin);
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || !isProduction) {
-      console.log('✅ CORS - Origin allowed:', origin);
+  origin: (origin, callback) => {
+    console.log('🔍 CORS Check - Origin:', origin);
+    if (!origin || allowedOrigins.has(origin) || !isProduction) {
+      console.log('✅ CORS allowed:', origin);
       callback(null, true);
     } else {
-      console.log('❌ CORS - Origin blocked:', origin);
-      console.log('📋 CORS - Allowed origins:', allowedOrigins);
+      console.log('❌ CORS blocked:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Cookie',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-  ],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With', 'Accept', 'Origin'],
   exposedHeaders: ['Set-Cookie'],
   optionsSuccessStatus: 200,
-  preflightContinue: false,
-  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 /* ───────── Session cookie ───────── */
-app.set('trust proxy', 1); // Secure cookies on Render
+app.set('trust proxy', 1); // Required by cookie-session behind Render proxy
 app.use(
   session({
-    name:      'harmonize-session',
-    secret:    SESSION_SECRET,
-    maxAge:    7 * 24 * 60 * 60 * 1000,
-    sameSite:  isProduction ? 'none' : 'lax',
-    secure:    isProduction,
-    httpOnly:  true,
-    signed:    true,
+    name: 'harmonize-session',
+    secret: SESSION_SECRET,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction,
+    httpOnly: true,
+    signed: true,
   })
 );
 
@@ -98,9 +87,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 if (!isProduction) {
   app.use((req, res, next) => {
     console.log(`${req.method} ${req.path}`);
-    console.log('Origin:', req.get('Origin'));
-    console.log('Session ID:', req.session?.userId || 'none');
-    console.log('Cookies:', req.headers.cookie ? 'present' : 'none');
+    console.log('→ Origin:', req.get('Origin'));
+    console.log('→ Session ID:', req.session?.userId || 'none');
+    console.log('→ Cookies:', req.headers.cookie ? 'present' : 'none');
     next();
   });
 }
@@ -108,10 +97,10 @@ if (!isProduction) {
 /* ───────── Health Check ───────── */
 app.get('/health', (req, res) => {
   res.json({
-    status:      'ok',
-    timestamp:   new Date().toISOString(),
+    status: 'ok',
+    timestamp: new Date().toISOString(),
     environment: NODE_ENV,
-    session:     req.session?.userId ? 'active' : 'none',
+    session: req.session?.userId ? 'active' : 'none',
   });
 });
 
@@ -129,7 +118,7 @@ app.use('/api/search',        searchRoutes);
 app.use('/api/musicPosts',    musicPostsRoutes);
 app.use('/api/users',         usersRoutes);
 
-// Special case: nested user tiles
+// Special nested tiles route
 app.use('/api/users/:userId/tiles', (req, res, next) => {
   req.url = `/user/${req.params.userId}`;
   tilesRoutes(req, res, next);
@@ -142,7 +131,7 @@ app.use('*', (req, res) =>
 
 /* ───────── Error Handler ───────── */
 app.use((err, req, res, _next) => {
-  console.error(err);
+  console.error('❌ Error:', err);
   if (err.message?.includes('CORS')) {
     return res.status(403).json({ error: 'CORS', message: err.message });
   }
@@ -155,21 +144,22 @@ app.use((err, req, res, _next) => {
 /* ───────── DB & Server Startup ───────── */
 mongoose
   .connect(MONGO_URI)
-  .then(() => console.log('✓ MongoDB connected'))
+  .then(() => {
+    console.log('✓ MongoDB connected');
+    app.listen(PORT, () => {
+      console.log(`🚀 Server listening on port ${PORT}`);
+      console.log(`🌐 Frontend origin allowed: ${FRONTEND}`);
+    });
+  })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);
   });
 
-app.listen(PORT, () => {
-  console.log(`🚀  API listening on ${PORT}`);
-  console.log(`🌐  CORS origin: ${FRONTEND}`);
-});
-
 /* ───────── Graceful Shutdown ───────── */
 ['SIGTERM', 'SIGINT'].forEach((sig) =>
   process.on(sig, () => {
-    console.log(`${sig} received, shutting down`);
+    console.log(`🛑 ${sig} received. Closing server.`);
     mongoose.connection.close(() => process.exit(0));
   })
 );

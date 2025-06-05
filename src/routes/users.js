@@ -5,16 +5,11 @@ import { requireAuth } from './auth.js';
 
 const router = Router();
 
-/* ────────────────────────────────────────────────────────── */
-/*  SEARCH USERS (excludes you)                               */
-/* ────────────────────────────────────────────────────────── */
+/* ───────── SEARCH USERS ───────── */
 router.get('/search', requireAuth, async (req, res) => {
   try {
-    console.log('[USERS] Search request received');
     const { q = '' } = req.query;
     const currentUserId = req.user?.id || req.session?.userId;
-
-    console.log('[USERS] Search query:', q, 'Current user:', currentUserId);
 
     const query = {
       _id: { $ne: currentUserId },
@@ -30,21 +25,17 @@ router.get('/search', requireAuth, async (req, res) => {
       .select('displayName username avatar spotifyId')
       .limit(20);
 
-    console.log('[USERS] Found users:', users.length);
     res.json(users);
   } catch (err) {
-    console.error('[USERS] Error searching users:', err);
+    console.error('[USERS] Search error:', err);
     res.status(500).json({ error: 'Failed to search users' });
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  FOLLOW / UNFOLLOW                                         */
-/* ────────────────────────────────────────────────────────── */
+/* ───────── FOLLOW / UNFOLLOW ───────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) {
+  if (req.user.id === req.params.id)
     return res.status(400).json({ error: 'Cannot follow yourself' });
-  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -72,9 +63,8 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
 });
 
 router.delete('/:id/follow', requireAuth, async (req, res, next) => {
-  if (req.user.id === req.params.id) {
+  if (req.user.id === req.params.id)
     return res.status(400).json({ error: 'Cannot unfollow yourself' });
-  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -101,9 +91,7 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  FOLLOWERS AND FOLLOWING HELPERS                           */
-/* ────────────────────────────────────────────────────────── */
+/* ───────── FOLLOWING / FOLLOWERS ───────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   const user = await User.findById(req.params.id)
     .populate('following', '_id username displayName avatar');
@@ -116,24 +104,18 @@ router.get('/:id/followers', requireAuth, async (req, res) => {
   res.json(user?.followers ?? []);
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  SPOTIFY TOP ARTISTS                                       */
-/* ────────────────────────────────────────────────────────── */
+/* ───────── SPOTIFY TOP ARTISTS ───────── */
 router.get('/:userId/top-artists', requireAuth, async (req, res) => {
   try {
     const { userId } = req.params;
     const user = await User.findById(userId);
-    if (!user || !user.spotifyAccessToken) {
+    if (!user || !user.spotifyAccessToken)
       return res.status(404).json({ error: 'User not found or Spotify not connected' });
-    }
 
     const { getUserSpotifyClient } = await import('../spotifyClient.js');
     const spotify = await getUserSpotifyClient(user);
 
-    const result = await spotify.getMyTopArtists({
-      time_range: 'medium_term',
-      limit: 20,
-    });
+    const result = await spotify.getMyTopArtists({ time_range: 'medium_term', limit: 20 });
 
     const artists = result.body.items.map(artist => ({
       id: artist.id,
@@ -145,14 +127,12 @@ router.get('/:userId/top-artists', requireAuth, async (req, res) => {
 
     res.json({ items: artists });
   } catch (err) {
-    console.error('Error fetching user top artists:', err);
+    console.error('Error fetching top artists:', err);
     res.status(500).json({ error: 'Failed to fetch user top artists' });
   }
 });
 
-/* ────────────────────────────────────────────────────────── */
-/*  GENERAL USER ROUTES                                       */
-/* ────────────────────────────────────────────────────────── */
+/* ───────── GENERAL USERS ───────── */
 
 // Get all users
 router.get('/', async (req, res) => {
@@ -160,7 +140,7 @@ router.get('/', async (req, res) => {
   res.json(users);
 });
 
-// Create new user
+// Create user
 router.post('/', async (req, res) => {
   try {
     const newUser = await User.create(req.body);
@@ -186,16 +166,13 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
-// 🛠️ FIXED: Get user by ID with validation and safe population
-// Get user by ID – keep this last
+// 🔧 FIXED: Get user by ID
 router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('favoriteTracks', 'title'); // Removed .populate('friends', ...)
+      .populate('favoriteTracks', 'title');
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     res.json(user);
   } catch (err) {
