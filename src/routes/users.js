@@ -85,6 +85,23 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
   }
 });
 
+// routes/users.js
+router.post('/location', async (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { latitude, longitude } = req.body;
+
+  await User.findByIdAndUpdate(userId, {
+    location: {
+      type: 'Point',
+      coordinates: [longitude, latitude],
+    }
+  });
+
+  res.json({ success: true });
+});
+
 router.delete('/:id/follow', requireAuth, async (req, res, next) => {
   try {
     const currentUserId = req.user?.id || req.session?.userId;
