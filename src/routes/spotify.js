@@ -139,6 +139,40 @@ router.get('/user/:id', async (req, res) => {
   }
 });
 
+// Add this route to your spotify.js routes file
+router.get('/user/:id/top-artists', async (req, res) => {
+  try {
+    const friend = await User.findById(req.params.id);
+    if (!friend || !friend.spotifyAccessToken || !friend.spotifyRefreshToken) {
+      return res.status(404).json({ error: 'Spotify not connected for this user' });
+    }
+
+    const spotify = await getUserSpotifyClient(friend);
+
+    const { time_range = 'medium_term', limit = 20 } = req.query;
+
+    const result = await spotify.getMyTopArtists({
+      time_range,
+      limit: Math.min(Number(limit), 50),
+    });
+
+    const artists = result.body.items.map(artist => ({
+      id: artist.id,
+      name: artist.name,
+      images: artist.images,
+      image: artist.images?.[0]?.url || null,
+      genres: artist.genres,
+      popularity: artist.popularity,
+      followers: artist.followers?.total,
+      external_urls: artist.external_urls,
+    }));
+
+    res.json({ items: artists });
+  } catch (err) {
+    console.error('[SPOTIFY] Error fetching user top artists:', err);
+    res.status(500).json({ error: 'Failed to fetch user top artists' });
+  }
+});
 
 
 export default router;
