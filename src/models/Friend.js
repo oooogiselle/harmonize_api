@@ -1,23 +1,14 @@
 // models/Friend.js
 import mongoose from 'mongoose';
 
-const friendSchema = new mongoose.Schema({
-  userName: String,
-  displayName: { type: String, required: true },
-  location: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number], // [lng, lat]
-      required: true
-    }
-  }
-});
+const friendSchema = new mongoose.Schema(
+  {
+    /* follower */ userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    /* followee */ friendId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
 
-friendSchema.index({ location: '2dsphere' }); // for geo queries
+friendSchema.index({ userId: 1, friendId: 1 }, { unique: true });
 
-const Friend = mongoose.model('Friend', friendSchema);
-export default Friend;
+export default mongoose.model('Friend', friendSchema);

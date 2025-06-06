@@ -1,97 +1,198 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import { requireAuth } from './auth.js';
 
 const router = Router();
 
-
+/* ─────────────────────────────── */
+/*  SEARCH USERS (excludes self)   */
+/* ─────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
   try {
-    console.log('[USERS] Search request received');
     const { q = '' } = req.query;
-    const currentUserId = req.session.userId;
+    const currentUserId = req.user?.id || req.session?.userId;
 
-    console.log('[USERS] Search query:', q, 'Current user:', currentUserId);
-
-    let query = {
-      _id: { $ne: currentUserId }, // Exclude current user
+    const query = {
+      _id: { $ne: currentUserId },
+      ...(q.trim() && {
+        $or: [
+          { displayName: { $regex: q, $options: 'i' } },
+          { username: { $regex: q, $options: 'i' } },
+        ],
+      }),
     };
 
-    // Add search criteria if query provided
-    if (q.trim()) {
-      query.$or = [
-        { displayName: { $regex: q, $options: 'i' } },
-        { username: { $regex: q, $options: 'i' } },
-      ];
-    }
-
     const users = await User.find(query)
-      .select('displayName username spotifyId')
+      .select('displayName username avatar spotifyId')
       .limit(20);
 
-    console.log('[USERS] Found users:', users.length);
     res.json(users);
   } catch (err) {
-    console.error('[USERS] Error searching users:', err);
+    console.error('[USERS] Search error:', err);
     res.status(500).json({ error: 'Failed to search users' });
   }
 });
 
-// Get user's top artists (for blending) - ALSO SPECIFIC, so put before /:id
-router.get('/:userId/top-artists', requireAuth, async (req, res) => {
+/* ─────────────────────────────── */
+/*  FOLLOW / UNFOLLOW - FIXED      */
+/* ─────────────────────────────── */
+router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
-    const { userId } = req.params;
-    
-    // Check if user exists and has Spotify connected
-    const user = await User.findById(userId);
-    if (!user || !user.spotifyAccessToken) {
-      return res.status(404).json({ error: 'User not found or Spotify not connected' });
+    const currentUserId = req.user?.id || req.session?.userId;
+    const targetUserId = req.params.id;
+
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    // Get user's Spotify client
-    const { getUserSpotifyClient } = await import('../spotifyClient.js');
-    const spotify = await getUserSpotifyClient(user);
-    
-    const result = await spotify.getMyTopArtists({
-      time_range: 'medium_term',
-      limit: 20,
-    });
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot follow yourself' });
+    }
 
-    const artists = result.body.items.map(artist => ({
-      id: artist.id,
-      name: artist.name,
-      images: artist.images,
-      genres: artist.genres,
-      popularity: artist.popularity,
-    }));
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    res.json({ items: artists });
+    try {
+      const current = await User.findByIdAndUpdate(
+        currentUserId,
+        { $addToSet: { following: targetUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      const target = await User.findByIdAndUpdate(
+        targetUserId,
+        { $addToSet: { followers: currentUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      if (!current || !target) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await session.commitTransaction();
+      res.status(201).json({ current, target });
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
   } catch (err) {
-    console.error('Error fetching user top artists:', err);
-    res.status(500).json({ error: 'Failed to fetch user top artists' });
+    console.error('[USERS] Follow error:', err);
+    next(err);
   }
 });
 
-// Now the general routes can come after the specific ones
+router.delete('/:id/follow', requireAuth, async (req, res, next) => {
+  try {
+    const currentUserId = req.user?.id || req.session?.userId;
+    const targetUserId = req.params.id;
 
-// Get all users
-router.get('/', async (req, res) => {
-  const users = await User.find().select('-passwordHash');
-  res.json(users);
+    if (!currentUserId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ error: 'Cannot unfollow yourself' });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const current = await User.findByIdAndUpdate(
+        currentUserId,
+        { $pull: { following: targetUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      const target = await User.findByIdAndUpdate(
+        targetUserId,
+        { $pull: { followers: currentUserId } },
+        { new: true, session }
+      ).select('_id username displayName avatar following followers');
+
+      if (!current || !target) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await session.commitTransaction();
+      res.json({ current, target });
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
+  } catch (err) {
+    console.error('[USERS] Unfollow error:', err);
+    next(err);
+  }
 });
 
-// Create new user
+/* ─────────────────────────────── */
+/*  FOLLOWING & FOLLOWERS LIST     */
+/* ─────────────────────────────── */
+router.get('/:id/following', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .populate('following', '_id username displayName avatar');
+    res.json(user?.following ?? []);
+  } catch (err) {
+    console.error('[USERS] Following list error:', err);
+    res.status(500).json({ error: 'Failed to fetch following list' });
+  }
+});
+
+router.get('/:id/followers', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .populate('followers', '_id username displayName avatar');
+    res.json(user?.followers ?? []);
+  } catch (err) {
+    console.error('[USERS] Followers list error:', err);
+    res.status(500).json({ error: 'Failed to fetch followers list' });
+  }
+});
+
+/* ─────────────────────────────── */
+/*  BASIC USER ROUTES              */
+/* ─────────────────────────────── */
+router.get('/', async (req, res) => {
+  try {
+    const users = await User.find().select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
+    res.json(users);
+  } catch (err) {
+    console.error('[USERS] List error:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const newUser = await User.create(req.body);
     res.status(201).json(newUser);
   } catch (err) {
-    console.error(err);
-    res.status(400).json({ msg: 'Failed to create user', err });
+    console.error('[USERS] Creation error:', err);
+    res.status(400).json({ error: 'Failed to create user' });
   }
 });
 
-// Add favorite track
+router.patch('/:id', async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    res.json(user);
+  } catch (err) {
+    console.error('[USERS] Update error:', err);
+    res.status(400).json({ error: 'Failed to update user' });
+  }
+});
+
 router.patch('/:id/favorite', async (req, res) => {
   const { trackId } = req.body;
   try {
@@ -102,29 +203,27 @@ router.patch('/:id/favorite', async (req, res) => {
     );
     res.json(user);
   } catch (err) {
-    res.status(400).json({ msg: 'Failed to add favorite track', err });
+    console.error('[USERS] Favorite update error:', err);
+    res.status(400).json({ error: 'Failed to add favorite track' });
   }
 });
 
-// Get user by ID - PUT THIS LAST among the /:id routes
+// User profile route - no Spotify dependencies
 router.get('/:id', async (req, res) => {
-  const user = await User.findById(req.params.id)
-    .populate('favoriteTracks', 'title')
-    .populate('friends', 'username');
-  res.json(user);
-});
-
-// Update user
-router.patch('/:id', async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    const user = await User.findById(req.params.id)
+      .populate('following', 'username displayName avatar')
+      .populate('followers', 'username displayName avatar')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken'); // Hide sensitive data
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     res.json(user);
   } catch (err) {
-    res.status(400).json({ msg: 'Failed to update user', err });
+    console.error('[USERS] Profile fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
 

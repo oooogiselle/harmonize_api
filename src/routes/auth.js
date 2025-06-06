@@ -181,11 +181,14 @@ router.get('/spotify/callback', async (req, res) => {
   }
 });
 export const requireAuth = (req, res, next) => {
-  if (!req.session || !req.session.userId) {
+  const userId = req.session?.userId;
+
+  if (!userId) {
     console.log('[AUTH] No session found, rejecting request');
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
+  req.user = { id: userId }; // ✅ attach user id
   console.log('[AUTH] Session found for user:', req.session.userId);
   next();
 };
