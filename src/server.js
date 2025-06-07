@@ -20,6 +20,7 @@ import genreRoutes         from './routes/genres.js';
 import searchRoutes        from './routes/search.js';
 import musicPostsRoutes    from './routes/musicPosts.js';
 
+
 const app = express();
 
 /* ───────── Environment ───────── */

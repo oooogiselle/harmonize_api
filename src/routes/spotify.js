@@ -1,6 +1,7 @@
 import express from 'express';
 import SpotifyWebApi from 'spotify-web-api-node';
 import User from '../models/User.js';
+import Friend from '../models/Friend.js';
 import { getUserSpotifyClient } from '../spotifyClient.js';
 
 const router = express.Router();
@@ -171,6 +172,55 @@ router.get('/user/:id/top-artists', async (req, res) => {
   } catch (err) {
     console.error('[SPOTIFY] Error fetching user top artists:', err);
     res.status(500).json({ error: 'Failed to fetch user top artists' });
+  }
+});
+router.get('/friends/top', async (req, res) => {
+  try {
+    const userId = req.session?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const friendships = await Friend.find({ userId }).populate('friendId');
+    const friendsWithSpotify = friendships
+      .map(f => f.friendId)
+      .filter(f => f.spotifyAccessToken && f.spotifyRefreshToken);
+
+    const results = await Promise.allSettled(
+      friendsWithSpotify.map(async friend => {
+        try {
+          const spotify = await getUserSpotifyClient(friend);
+
+          const [topTracks, topArtists] = await Promise.all([
+            spotify.getMyTopTracks({ limit: 5, time_range: 'medium_term' }),
+            spotify.getMyTopArtists({ limit: 5, time_range: 'medium_term' }),
+          ]);
+
+          return {
+            friend: {
+              id: friend._id,
+              name: friend.displayName || friend.username,
+              image: friend.profilePicture || null,
+              location: friend.location,
+            },
+            topTracks: topTracks.body.items,
+            topArtists: topArtists.body.items,
+          };
+        } catch (err) {
+          console.warn(`Skipping friend ${friend._id} due to Spotify error`, err);
+          return null;
+        }
+      })
+    );
+
+    const filteredResults = results
+      .filter(r => r.status === 'fulfilled' && r.value)
+      .map(r => r.value);
+
+    res.json({ friends: filteredResults });
+  } catch (err) {
+    console.error('Failed to fetch friends Spotify data:', err);
+    res.status(500).json({ error: 'Failed to load friend Spotify data' });
   }
 });
 

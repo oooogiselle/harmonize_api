@@ -1,7 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
 import SpotifyWebApi from 'spotify-web-api-node';
-import { v4 as uuid } from 'uuid';
 import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 
@@ -31,8 +30,8 @@ router.post('/login', async (req, res) => {
 
     const user = await User.findOne({
       $or: [
-        { username: usernameOrEmail.toLowerCase() },
-        { email: usernameOrEmail.toLowerCase() },
+        { username: usernameOrEmail.trim().toLowerCase() },
+        { email: usernameOrEmail.trim().toLowerCase() },
       ],
     }).select('+password');
 
@@ -63,8 +62,8 @@ router.post('/register', async (req, res) => {
 
     const existingUser = await User.findOne({
       $or: [
-        { username: username.toLowerCase() },
-        ...(email ? [{ email: email.toLowerCase() }] : []),
+        { username: username.trim().toLowerCase() },
+        ...(email ? [{ email: email.trim().toLowerCase() }] : []),
       ],
     });
 
@@ -72,14 +71,20 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'Username or email already taken' });
 
     const hash = await bcrypt.hash(password, 10);
+
     const user = await User.create({
-      displayName: name,
-      username: username.toLowerCase(),
-      email: email?.toLowerCase(),
+      displayName: name.trim(),
+      username: username.trim().toLowerCase(),
+      email: email?.trim().toLowerCase(),
       password: hash,
       accountType,
+      location: {
+        type: 'Point',
+        coordinates: [0, 0], // 🛡️ default fallback to prevent errors
+      },
     });
 
+    req.session.userId = user._id;
     res.status(201).json({ message: 'User registered', userId: user._id });
   } catch (err) {
     console.error('Registration error:', err);
@@ -88,6 +93,23 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ message: `${field} already in use` });
     }
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/* ───── GET CURRENT USER ───── */
+router.get('/api/me', async (req, res) => {
+  try {
+    if (!req.session?.userId)
+      return res.status(401).json({ error: 'Not authenticated' });
+
+    const user = await User.findById(req.session.userId).select('-password');
+    if (!user)
+      return res.status(401).json({ error: 'User not found' });
+
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -115,24 +137,6 @@ router.get('/spotify/login', (req, res) => {
   } catch (err) {
     console.error('Spotify login error:', err);
     res.status(500).json({ error: 'Spotify login failed' });
-  }
-});
-
-router.get('/api/me', async (req, res) => {
-  try {
-    if (!req.session || !req.session.userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const user = await User.findById(req.session.userId).select('-password');
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    res.json(user);
-  } catch (err) {
-    console.error('Error fetching user:', err);
-    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -165,6 +169,10 @@ router.get('/spotify/callback', async (req, res) => {
         email: profile.email,
         username: profile.id,
         accountType: 'user',
+        location: {
+          type: 'Point',
+          coordinates: [0, 0], // 🛡️ fallback for validation
+        },
       });
     }
 
@@ -180,21 +188,20 @@ router.get('/spotify/callback', async (req, res) => {
     res.status(500).json({ error: 'Spotify authorization failed' });
   }
 });
-export const requireAuth = (req, res, next) => {
-  const userId = req.session?.userId;
 
-  if (!userId) {
+/* ───── AUTH MIDDLEWARES ───── */
+export const requireAuth = (req, res, next) => {
+  if (!req.session?.userId) {
     console.log('[AUTH] No session found, rejecting request');
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  req.user = { id: userId }; // ✅ attach user id
-  console.log('[AUTH] Session found for user:', req.session.userId);
+  req.user = { id: req.session.userId };
   next();
 };
 
 export const optionalAuth = (req, res, next) => {
-  if (req.session && req.session.userId) {
+  if (req.session?.userId) {
     console.log('[AUTH] Optional auth - user logged in:', req.session.userId);
   } else {
     console.log('[AUTH] Optional auth - no user session');

@@ -6,6 +6,33 @@ import { requireAuth } from './auth.js';
 const router = Router();
 
 /* ─────────────────────────────── */
+/*  GET CURRENT USER (/me)         */
+/* ─────────────────────────────── */
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.session?.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findById(userId)
+      .populate('following', '_id username displayName avatar location')
+      .populate('followers', '_id username displayName avatar location')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching current user:', err);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+/* ─────────────────────────────── */
 /*  SEARCH USERS (excludes self)   */
 /* ─────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
@@ -35,7 +62,7 @@ router.get('/search', requireAuth, async (req, res) => {
 });
 
 /* ─────────────────────────────── */
-/*  FOLLOW / UNFOLLOW - FIXED      */
+/*  FOLLOW / UNFOLLOW              */
 /* ─────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
@@ -134,12 +161,72 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 });
 
 /* ─────────────────────────────── */
+/*  LOCATION UPDATE                */
+/* ─────────────────────────────── */
+router.post('/location', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.session?.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { latitude, longitude } = req.body;
+
+    // Validate coordinates - reject default/invalid values
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({ error: 'Invalid coordinates' });
+    }
+    
+    if (latitude === 0 && longitude === 0) {
+      return res.status(400).json({ error: 'Invalid coordinates: cannot be 0,0' });
+    }
+    
+    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return res.status(400).json({ error: 'Invalid coordinates: out of range' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        location: {
+          type: 'Point',
+          coordinates: [longitude, latitude], // GeoJSON format: [lng, lat]
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`[USERS] Location updated for user ${userId}:`, { latitude, longitude });
+    res.json({ success: true, location: updatedUser.location });
+    
+  } catch (err) {
+    console.error('[USERS] Location update error:', err);
+    res.status(500).json({ error: 'Failed to update location' });
+  }
+});
+
+router.post('/bulk', async (req, res) => {
+  try {
+    const ids = req.body.ids || [];
+    const users = await User.find({ _id: { $in: ids } }).select('-password -spotifyAccessToken -spotifyRefreshToken');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch users', error: err.message });
+  }
+});
+
+/* ─────────────────────────────── */
 /*  FOLLOWING & FOLLOWERS LIST     */
 /* ─────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('following', '_id username displayName avatar');
+      .populate('following', '_id username displayName avatar location');
     res.json(user?.following ?? []);
   } catch (err) {
     console.error('[USERS] Following list error:', err);
@@ -150,7 +237,7 @@ router.get('/:id/following', requireAuth, async (req, res) => {
 router.get('/:id/followers', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('followers', '_id username displayName avatar');
+      .populate('followers', '_id username displayName avatar location');
     res.json(user?.followers ?? []);
   } catch (err) {
     console.error('[USERS] Followers list error:', err);
@@ -208,13 +295,15 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
-// User profile route - no Spotify dependencies
 router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate('following', 'username displayName avatar')
-      .populate('followers', 'username displayName avatar')
-      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken'); // Hide sensitive data
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ error: 'Bad user id' });
+          }
+      const user = await User.findById(req.params.id)
+      .populate('following', 'username displayName avatar location')
+      .populate('followers', 'username displayName avatar location')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

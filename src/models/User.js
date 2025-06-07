@@ -14,51 +14,59 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
-  avatar: {
-    type: String,
-  },
+  avatar: String,
+
   email: {
     type: String,
     unique: true,
     sparse: true,
   },
-  password: {
-    type: String,
-  },
+  password: String,
+
   accountType: {
     type: String,
     enum: ['user', 'artist'],
     default: 'user',
   },
+
   spotifyId: {
     type: String,
     unique: true,
     sparse: true,
   },
-  followers: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+
+  followers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
+
+  following: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
+
+  spotifyAccessToken: String,
+  spotifyRefreshToken: String,
+  spotifyTokenExpiresAt: Date,
+
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
     },
-  ],
-  following: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
-  ],
-  spotifyAccessToken: {
-    type: String,
-  },
-  spotifyRefreshToken: {
-    type: String,
-  },
-  spotifyTokenExpiresAt: {
-    type: Date,
-  },
+    coordinates: {
+      type: [Number],
+      default: [0, 0],        // ✅ Provide a default value
+      required: false,        // ✅ Make it optional to fix registration
+    }
+  }
 }, {
   timestamps: true,
 });
+
+// ✅ Enable geospatial indexing
+userSchema.index({ location: '2dsphere' });
 
 const User = mongoose.model('User', userSchema);
 export default User;
