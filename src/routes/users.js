@@ -6,6 +6,33 @@ import { requireAuth } from './auth.js';
 const router = Router();
 
 /* ─────────────────────────────── */
+/*  GET CURRENT USER (/me)         */
+/* ─────────────────────────────── */
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.session?.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await User.findById(userId)
+      .populate('following', '_id username displayName avatar location')
+      .populate('followers', '_id username displayName avatar location')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching current user:', err);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+/* ─────────────────────────────── */
 /*  SEARCH USERS (excludes self)   */
 /* ─────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
@@ -136,12 +163,8 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 /* ─────────────────────────────── */
 /*  LOCATION UPDATE                */
 /* ─────────────────────────────── */
-/* ─────────────────────────────── */
-/*  LOCATION UPDATE                */
-/* ─────────────────────────────── */
-router.post('/location', requireAuth, async (req, res) => {  // 👈 Add requireAuth here
+router.post('/location', requireAuth, async (req, res) => {
   try {
-    // Use the same pattern as other authenticated routes
     const userId = req.user?.id || req.session?.userId;
     
     if (!userId) {
