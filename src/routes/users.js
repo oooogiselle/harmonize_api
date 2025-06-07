@@ -35,7 +35,7 @@ router.get('/search', requireAuth, async (req, res) => {
 });
 
 /* ─────────────────────────────── */
-/*  FOLLOW / UNFOLLOW - FIXED      */
+/*  FOLLOW / UNFOLLOW              */
 /* ─────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
@@ -83,23 +83,6 @@ router.post('/:id/follow', requireAuth, async (req, res, next) => {
     console.error('[USERS] Follow error:', err);
     next(err);
   }
-});
-
-// routes/users.js
-router.post('/location', async (req, res) => {
-  const userId = req.session?.userId;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { latitude, longitude } = req.body;
-
-  await User.findByIdAndUpdate(userId, {
-    location: {
-      type: 'Point',
-      coordinates: [longitude, latitude],
-    }
-  });
-
-  res.json({ success: true });
 });
 
 router.delete('/:id/follow', requireAuth, async (req, res, next) => {
@@ -151,12 +134,31 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 });
 
 /* ─────────────────────────────── */
+/*  LOCATION UPDATE                */
+/* ─────────────────────────────── */
+router.post('/location', async (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { latitude, longitude } = req.body;
+
+  await User.findByIdAndUpdate(userId, {
+    location: {
+      type: 'Point',
+      coordinates: [longitude, latitude],
+    }
+  });
+
+  res.json({ success: true });
+});
+
+/* ─────────────────────────────── */
 /*  FOLLOWING & FOLLOWERS LIST     */
 /* ─────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('following', '_id username displayName avatar');
+      .populate('following', '_id username displayName avatar location');
     res.json(user?.following ?? []);
   } catch (err) {
     console.error('[USERS] Following list error:', err);
@@ -167,7 +169,7 @@ router.get('/:id/following', requireAuth, async (req, res) => {
 router.get('/:id/followers', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('followers', '_id username displayName avatar');
+      .populate('followers', '_id username displayName avatar location');
     res.json(user?.followers ?? []);
   } catch (err) {
     console.error('[USERS] Followers list error:', err);
@@ -225,13 +227,12 @@ router.patch('/:id/favorite', async (req, res) => {
   }
 });
 
-// User profile route - no Spotify dependencies
 router.get('/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .populate('following', 'username displayName avatar')
-      .populate('followers', 'username displayName avatar')
-      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken'); // Hide sensitive data
+      .populate('following', 'username displayName avatar location')
+      .populate('followers', 'username displayName avatar location')
+      .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
