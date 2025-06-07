@@ -19,7 +19,6 @@ import meRoutes            from './routes/me.js';
 import genreRoutes         from './routes/genres.js';
 import searchRoutes        from './routes/search.js';
 import musicPostsRoutes    from './routes/musicPosts.js';
-import { requireAuth } from '../middleware/auth.js';
 
 
 const app = express();
