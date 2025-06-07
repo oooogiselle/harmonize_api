@@ -79,22 +79,7 @@ app.use(
     signed: true,
   })
 );
-router.get('/me', requireAuth, async (req, res) => {
-  try {
-    const user = await User.findById(req.session.userId)
-      .populate('following', '_id username displayName avatar')
-      .populate('followers', '_id username displayName avatar');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(user);
-  } catch (err) {
-    console.error('Error fetching current user:', err);
-    res.status(500).json({ error: 'Failed to fetch user data' });
-  }
-});
+
 /* ───────── Body parsers ───────── */
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
