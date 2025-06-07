@@ -187,6 +187,16 @@ router.post('/location', requireAuth, async (req, res) => {  // 👈 Add require
   }
 });
 
+router.post('/bulk', async (req, res) => {
+  try {
+    const ids = req.body.ids || [];
+    const users = await User.find({ _id: { $in: ids } }).select('-password -spotifyAccessToken -spotifyRefreshToken');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch users', error: err.message });
+  }
+});
+
 /* ─────────────────────────────── */
 /*  FOLLOWING & FOLLOWERS LIST     */
 /* ─────────────────────────────── */
