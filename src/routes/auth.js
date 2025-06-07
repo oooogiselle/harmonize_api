@@ -1,7 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
 import SpotifyWebApi from 'spotify-web-api-node';
-import { v4 as uuid } from 'uuid';
 import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 
@@ -72,6 +71,7 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'Username or email already taken' });
 
     const hash = await bcrypt.hash(password, 10);
+
     const user = await User.create({
       displayName: name.trim(),
       username: username.trim().toLowerCase(),
@@ -80,7 +80,7 @@ router.post('/register', async (req, res) => {
       accountType,
       location: {
         type: 'Point',
-        coordinates: [0, 0],
+        coordinates: [0, 0], // 🛡️ default fallback to prevent errors
       },
     });
 
@@ -99,14 +99,12 @@ router.post('/register', async (req, res) => {
 /* ───── GET CURRENT USER ───── */
 router.get('/api/me', async (req, res) => {
   try {
-    if (!req.session || !req.session.userId) {
+    if (!req.session?.userId)
       return res.status(401).json({ error: 'Not authenticated' });
-    }
 
     const user = await User.findById(req.session.userId).select('-password');
-    if (!user) {
+    if (!user)
       return res.status(401).json({ error: 'User not found' });
-    }
 
     res.json(user);
   } catch (err) {
@@ -173,7 +171,7 @@ router.get('/spotify/callback', async (req, res) => {
         accountType: 'user',
         location: {
           type: 'Point',
-          coordinates: [0, 0],
+          coordinates: [0, 0], // 🛡️ fallback for validation
         },
       });
     }
@@ -193,15 +191,12 @@ router.get('/spotify/callback', async (req, res) => {
 
 /* ───── AUTH MIDDLEWARES ───── */
 export const requireAuth = (req, res, next) => {
-  const userId = req.session?.userId;
-
-  if (!userId) {
+  if (!req.session?.userId) {
     console.log('[AUTH] No session found, rejecting request');
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  req.user = { id: userId };
-  console.log('[AUTH] Session found for user:', userId);
+  req.user = { id: req.session.userId };
   next();
 };
 

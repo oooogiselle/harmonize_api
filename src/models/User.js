@@ -56,8 +56,9 @@ const userSchema = new mongoose.Schema({
       default: 'Point',
     },
     coordinates: {
-      type: [Number], // [longitude, latitude]
-      required: true,
+      type: [Number],
+      default: [0, 0],        // ✅ Provide a default value
+      required: false,        // ✅ Make it optional to fix registration
     }
   }
 }, {
