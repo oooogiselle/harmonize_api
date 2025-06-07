@@ -150,9 +150,17 @@ router.post('/location', requireAuth, async (req, res) => {  // 👈 Add require
 
     const { latitude, longitude } = req.body;
 
-    // Validate coordinates
+    // Validate coordinates - reject default/invalid values
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       return res.status(400).json({ error: 'Invalid coordinates' });
+    }
+    
+    if (latitude === 0 && longitude === 0) {
+      return res.status(400).json({ error: 'Invalid coordinates: cannot be 0,0' });
+    }
+    
+    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return res.status(400).json({ error: 'Invalid coordinates: out of range' });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
