@@ -297,7 +297,10 @@ router.patch('/:id/favorite', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ error: 'Bad user id' });
+          }
+      const user = await User.findById(req.params.id)
       .populate('following', 'username displayName avatar location')
       .populate('followers', 'username displayName avatar location')
       .select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');
