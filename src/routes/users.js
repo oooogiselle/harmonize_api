@@ -136,20 +136,47 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
 /* ─────────────────────────────── */
 /*  LOCATION UPDATE                */
 /* ─────────────────────────────── */
-router.post('/location', async (req, res) => {
-  const userId = req.session?.userId;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { latitude, longitude } = req.body;
-
-  await User.findByIdAndUpdate(userId, {
-    location: {
-      type: 'Point',
-      coordinates: [longitude, latitude],
+/* ─────────────────────────────── */
+/*  LOCATION UPDATE                */
+/* ─────────────────────────────── */
+router.post('/location', requireAuth, async (req, res) => {  // 👈 Add requireAuth here
+  try {
+    // Use the same pattern as other authenticated routes
+    const userId = req.user?.id || req.session?.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
     }
-  });
 
-  res.json({ success: true });
+    const { latitude, longitude } = req.body;
+
+    // Validate coordinates
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({ error: 'Invalid coordinates' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        location: {
+          type: 'Point',
+          coordinates: [longitude, latitude], // GeoJSON format: [lng, lat]
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`[USERS] Location updated for user ${userId}:`, { latitude, longitude });
+    res.json({ success: true, location: updatedUser.location });
+    
+  } catch (err) {
+    console.error('[USERS] Location update error:', err);
+    res.status(500).json({ error: 'Failed to update location' });
+  }
 });
 
 /* ─────────────────────────────── */
