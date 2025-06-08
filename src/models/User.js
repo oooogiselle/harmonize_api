@@ -57,15 +57,14 @@ const userSchema = new mongoose.Schema({
     },
     coordinates: {
       type: [Number],
-      default: [0, 0],        // ✅ Provide a default value
-      required: false,        // ✅ Make it optional to fix registration
+      default: [0, 0],
+      required: false,
     }
   }
 }, {
   timestamps: true,
 });
 
-// ✅ Enable geospatial indexing
 userSchema.index({ location: '2dsphere' });
 
 const User = mongoose.model('User', userSchema);

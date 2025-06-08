@@ -80,7 +80,7 @@ router.post('/register', async (req, res) => {
       accountType,
       location: {
         type: 'Point',
-        coordinates: [0, 0], // 🛡️ default fallback to prevent errors
+        coordinates: [0, 0],
       },
     });
 
@@ -171,7 +171,7 @@ router.get('/spotify/callback', async (req, res) => {
         accountType: 'user',
         location: {
           type: 'Point',
-          coordinates: [0, 0], // 🛡️ fallback for validation
+          coordinates: [0, 0],
         },
       });
     }

@@ -1,6 +1,6 @@
 import User from '../models/User.js';
 
-// session-based authentication middleware (compatible with auth system)
+// session-based authentication middleware
 export const authenticateUser = async (req, res, next) => {
   try {
     const userId = req.session?.userId;
@@ -22,7 +22,6 @@ export const authenticateUser = async (req, res, next) => {
   }
 };
 
-// Optional: Keep the Spotify token-based auth for specific use cases
 export const authenticateSpotifyUser = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -33,7 +32,7 @@ export const authenticateSpotifyUser = async (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    // Verify Spotify token
+    // verify spotify token here
     const response = await fetch('https://api.spotify.com/v1/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -44,7 +43,7 @@ export const authenticateSpotifyUser = async (req, res, next) => {
 
     const spotifyUser = await response.json();
     
-    // Find user in database by Spotify ID
+    // code blob to find user in database by Spotify ID
     const user = await User.findOne({ spotifyId: spotifyUser.id });
     if (!user) {
       return res.status(401).json({ error: 'User not found in database' });

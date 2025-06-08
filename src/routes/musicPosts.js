@@ -7,7 +7,6 @@ import spotifyPreviewFinder from 'spotify-preview-finder';
 
 const router = Router();
 
-// GET all music posts
 router.get('/', async (req, res) => {
   try {
     const musicPosts = await MusicPost.find()
@@ -19,7 +18,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /spotify/search?q=track_name (public endpoint for search)
 router.get('/spotify/search', async (req, res) => {
   const { q } = req.query;
 
@@ -44,10 +42,8 @@ router.get('/spotify/search', async (req, res) => {
 
     const data = await searchRes.json();
 
-    // get tracks with preview URLs using spotify-preview-finder
     const enhancedTracks = await Promise.all(
       data.tracks.items.map(async (track) => {
-        // if Spotify doesn't provide a preview URL, try to find one
         if (!track.preview_url) {
           try {
             const searchQuery = `${track.name} ${track.artists[0]?.name}`;
@@ -83,7 +79,6 @@ router.get('/spotify/search', async (req, res) => {
   }
 });
 
-// helper function to find preview URL
 const findPreviewUrl = async (title, artist) => {
   try {
     const searchQuery = `${title} ${artist}`;
@@ -112,7 +107,6 @@ const findPreviewUrl = async (title, artist) => {
   }
 };
 
-// POST a new music post (logged in user only)
 router.post('/', authenticateUser, async (req, res) => {
   const { spotifyTrackId, caption, genre, tags, title, artist, coverUrl, previewUrl, duration } = req.body;
 
@@ -123,11 +117,9 @@ router.post('/', authenticateUser, async (req, res) => {
   try {
     let postData = {};
 
-    // if track details are provided from frontend, use them
     if (title && artist) {
       let finalPreviewUrl = previewUrl;
 
-      // if no preview URL provided or it's empty, try to find one
       if (!finalPreviewUrl) {
         console.log('No preview URL provided, attempting to find one...');
         const previewData = await findPreviewUrl(title, artist);
@@ -147,7 +139,6 @@ router.post('/', authenticateUser, async (req, res) => {
         uploadedBy: req.user._id,
       };
     } else {
-      // Otherwise, fetch from Spotify API
       const accessToken = await getAccessToken();
       const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${spotifyTrackId}`, {
         headers: {
@@ -164,7 +155,6 @@ router.post('/', authenticateUser, async (req, res) => {
       const trackData = await trackRes.json();
       console.log('Track data:', trackData);
 
-      // Try to find preview URL if not provided by Spotify
       let finalPreviewUrl = trackData.preview_url;
       if (!finalPreviewUrl) {
         console.log('No preview URL from Spotify, attempting to find one...');
@@ -186,7 +176,6 @@ router.post('/', authenticateUser, async (req, res) => {
       };
     }
 
-    // validate required fields
     if (!postData.spotifyTrackId || !postData.title || !postData.artist) {
       return res.status(400).json({ error: 'Missing required track info' });
     }
@@ -194,7 +183,6 @@ router.post('/', authenticateUser, async (req, res) => {
     const musicPost = new MusicPost(postData);
     await musicPost.save();
 
-    // populate the user info before sending response
     await musicPost.populate('uploadedBy', 'displayName username');
 
     res.status(201).json(musicPost);
@@ -204,7 +192,6 @@ router.post('/', authenticateUser, async (req, res) => {
   }
 });
 
-// LIKE a music post (requires authentication)
 router.post('/:id/like', authenticateUser, async (req, res) => {
   const userId = req.user._id;
   const postId = req.params.id;
@@ -219,15 +206,13 @@ router.post('/:id/like', authenticateUser, async (req, res) => {
     ;
     if (!musicPost) return res.status(404).json({ error: 'Post not found' });
 
-    // check if user has already liked this post
     const hasLiked = musicPost.likedBy.some(id => id.toString() === userId.toString());
     if (hasLiked) {
       return res.status(400).json({ error: 'Post already liked by user' });
     }
 
-    // add user to likedBy array and increment likes count
     musicPost.likedBy.push(userId);
-    musicPost.likes = musicPost.likedBy.length; // Ensure consistency
+    musicPost.likes = musicPost.likedBy.length;
     
     await musicPost.save();
     console.log(`User ${userId} liked post ${postId}. Total likes: ${musicPost.likes}`);
@@ -239,7 +224,6 @@ router.post('/:id/like', authenticateUser, async (req, res) => {
   }
 });
 
-// UNLIKE a music post (requires authentication)
 router.post('/:id/unlike', authenticateUser, async (req, res) => {
   const userId = req.user._id;
   const postId = req.params.id;
@@ -254,16 +238,14 @@ router.post('/:id/unlike', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Post not found' });
     }
 
-    // find the user in the likedBy array
     const userIndex = musicPost.likedBy.findIndex(id => id.toString() === userId.toString());
 
     if (userIndex === -1) {
       return res.status(400).json({ error: 'Post not liked by user' });
     }
 
-    // remove user from likedBy array and update likes count
     musicPost.likedBy.splice(userIndex, 1);
-    musicPost.likes = musicPost.likedBy.length; // Ensure consistency
+    musicPost.likes = musicPost.likedBy.length;
 
     await musicPost.save();
     
@@ -275,7 +257,6 @@ router.post('/:id/unlike', authenticateUser, async (req, res) => {
   }
 });
 
-// GET user's own posts (requires authentication)
 router.get('/my-posts', authenticateUser, async (req, res) => {
   try {
     const musicPosts = await MusicPost.find({ uploadedBy: req.user._id })

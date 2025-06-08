@@ -6,7 +6,6 @@ import { getUserSpotifyClient } from '../spotifyClient.js';
 
 const router = express.Router();
 
-// Add this function at the top of your file
 async function getAccessToken() {
   const spotifyApi = new SpotifyWebApi({
     clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -22,13 +21,11 @@ async function getAccessToken() {
   }
 }
 
-/* ─────────── /spotify/search?q=&type= ─────────── */
 router.get('/search', async (req, res) => {
   try {
     const { q, type = 'artist' } = req.query;
     if (!q) return res.status(400).json({ error: 'Missing search query' });
 
-    // Create a new Spotify API instance for each request
     const spotifyApi = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
@@ -87,7 +84,6 @@ router.get('/top-artists', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
 
-    // Get user's Spotify client with token refresh
     const spotify = await getUserSpotifyClient(user);
     
     const { time_range = 'medium_term', limit = 20 } = req.query;
@@ -115,7 +111,6 @@ router.get('/top-artists', async (req, res) => {
   }
 });
 
-// ─────────── GET Spotify data for a friend by userId ───────────
 router.get('/user/:id', async (req, res) => {
   try {
     const friend = await User.findById(req.params.id);
@@ -140,7 +135,6 @@ router.get('/user/:id', async (req, res) => {
   }
 });
 
-// Add this route to your spotify.js routes file
 router.get('/user/:id/top-artists', async (req, res) => {
   try {
     const friend = await User.findById(req.params.id);

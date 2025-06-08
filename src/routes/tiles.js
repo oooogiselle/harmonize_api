@@ -4,10 +4,8 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-/* utility */
 const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
-/* ───────── GET /api/tiles?userId=xxx — list tiles for a user ───────── */
 router.get('/', async (req, res) => {
   const { userId } = req.query;
   if (!isValidObjectId(userId))
@@ -22,7 +20,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-/* ───────── GET /api/tiles/:userId — same as above (legacy) ───────── */
 router.get('/:userId', async (req, res) => {
   const { userId } = req.params;
   if (!isValidObjectId(userId))
@@ -37,7 +34,6 @@ router.get('/:userId', async (req, res) => {
   }
 });
 
-/* ───────── POST /api/tiles — create tile (auth) ───────── */
 router.post('/', requireAuth, async (req, res) => {
   const currentUserId = req.session.userId;
   const {
@@ -74,7 +70,6 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-/* ───────── PATCH /api/tiles/bulk-layout — reorder tiles (auth) ───────── */
 router.patch('/bulk-layout', requireAuth, async (req, res) => {
   const { updates } = req.body;
   const currentUserId = req.session.userId;
@@ -102,7 +97,6 @@ router.patch('/bulk-layout', requireAuth, async (req, res) => {
   return res.json({ updated });
 });
 
-/* ───────── PATCH /api/tiles/:id — update tile (auth) ───────── */
 router.patch('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id))
@@ -124,7 +118,6 @@ router.patch('/:id', requireAuth, async (req, res) => {
   }
 });
 
-/* ───────── DELETE /api/tiles/:id — delete tile (auth) ───────── */
 router.delete('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id))

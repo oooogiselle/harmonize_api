@@ -5,9 +5,6 @@ import { requireAuth } from './auth.js';
 
 const router = Router();
 
-/* ─────────────────────────────── */
-/*  GET CURRENT USER (/me)         */
-/* ─────────────────────────────── */
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const userId = req.user?.id || req.session?.userId;
@@ -32,9 +29,6 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
-/* ─────────────────────────────── */
-/*  SEARCH USERS (excludes self)   */
-/* ─────────────────────────────── */
 router.get('/search', requireAuth, async (req, res) => {
   try {
     const { q = '' } = req.query;
@@ -61,9 +55,6 @@ router.get('/search', requireAuth, async (req, res) => {
   }
 });
 
-/* ─────────────────────────────── */
-/*  FOLLOW / UNFOLLOW              */
-/* ─────────────────────────────── */
 router.post('/:id/follow', requireAuth, async (req, res, next) => {
   try {
     const currentUserId = req.user?.id || req.session?.userId;
@@ -160,9 +151,6 @@ router.delete('/:id/follow', requireAuth, async (req, res, next) => {
   }
 });
 
-/* ─────────────────────────────── */
-/*  LOCATION UPDATE                */
-/* ─────────────────────────────── */
 router.post('/location', requireAuth, async (req, res) => {
   try {
     const userId = req.user?.id || req.session?.userId;
@@ -173,7 +161,6 @@ router.post('/location', requireAuth, async (req, res) => {
 
     const { latitude, longitude } = req.body;
 
-    // Validate coordinates - reject default/invalid values
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       return res.status(400).json({ error: 'Invalid coordinates' });
     }
@@ -191,7 +178,7 @@ router.post('/location', requireAuth, async (req, res) => {
       {
         location: {
           type: 'Point',
-          coordinates: [longitude, latitude], // GeoJSON format: [lng, lat]
+          coordinates: [longitude, latitude],
         }
       },
       { new: true }
@@ -220,9 +207,6 @@ router.post('/bulk', async (req, res) => {
   }
 });
 
-/* ─────────────────────────────── */
-/*  FOLLOWING & FOLLOWERS LIST     */
-/* ─────────────────────────────── */
 router.get('/:id/following', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
@@ -245,9 +229,6 @@ router.get('/:id/followers', requireAuth, async (req, res) => {
   }
 });
 
-/* ─────────────────────────────── */
-/*  BASIC USER ROUTES              */
-/* ─────────────────────────────── */
 router.get('/', async (req, res) => {
   try {
     const users = await User.find().select('-passwordHash -spotifyAccessToken -spotifyRefreshToken');

@@ -1,4 +1,3 @@
-// used for searching a Spotify track when creating a music post
 import express from 'express';
 import fetch from 'node-fetch';
 import { getSpotifyAccessToken } from '../utils/spotifyToken.js';

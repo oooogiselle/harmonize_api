@@ -6,7 +6,6 @@ import SpotifyWebApi from 'spotify-web-api-node';
 
 const router = Router();
 
-/* Utility: app-level Spotify client (no login needed) */
 async function getAppSpotify() {
   const api = new SpotifyWebApi({
     clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -36,7 +35,6 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-/* ✅ NEW MULTI-RESULT SEARCH ENDPOINT */
 router.get('/spotify/search', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Missing query parameter' });
@@ -58,7 +56,6 @@ router.get('/spotify/search', async (req, res) => {
   }
 });
 
-/* ✅ Specific route FIRST: /artists/spotify/:id */
 router.get('/spotify/:id', async (req, res) => {
   try {
     const spotify = await getAppSpotify();
@@ -138,9 +135,7 @@ router.patch('/artists/:id/bio', async (req, res) => {
   }
 });
 
-/* ❗ This must be LAST to avoid catching Spotify IDs */
 router.get('/:id', async (req, res) => {
-  // 🔒 Prevent CastError by skipping non-ObjectId values
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(404).json({ msg: 'Artist not found' });
   }

@@ -47,12 +47,12 @@ const allowedOrigins = new Set([
 
 const corsOptions = {
   origin: (origin, callback) => {
-    console.log('🔍 CORS Check - Origin:', origin);
+    console.log('CORS Check - Origin:', origin);
     if (!origin || allowedOrigins.has(origin) || !isProduction) {
-      console.log('✅ CORS allowed:', origin);
+      console.log('CORS allowed:', origin);
       callback(null, true);
     } else {
-      console.log('❌ CORS blocked:', origin);
+      console.log('CORS blocked:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -66,13 +66,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-/* ───────── Session cookie ───────── */
-app.set('trust proxy', 1); // Required by cookie-session behind Render proxy
+app.set('trust proxy', 1);
 app.use(
   session({
     name: 'harmonize-session',
     secret: SESSION_SECRET,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: isProduction ? 'none' : 'lax',
     secure: isProduction,
     httpOnly: true,
@@ -80,11 +79,9 @@ app.use(
   })
 );
 
-/* ───────── Body parsers ───────── */
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-/* ───────── Debug Logging ───────── */
 if (!isProduction) {
   app.use((req, res, next) => {
     console.log(`${req.method} ${req.path}`);
@@ -95,7 +92,6 @@ if (!isProduction) {
   });
 }
 
-/* ───────── Health Check ───────── */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -105,7 +101,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-/* ───────── Routes ───────── */
 app.use('/auth',              authRoutes);
 app.use('/spotify',           spotifyRoutes);
 app.use('/api/ticketmaster',  ticketmasterRoutes);
@@ -119,20 +114,17 @@ app.use('/api/search',        searchRoutes);
 app.use('/api/musicPosts',    musicPostsRoutes);
 app.use('/api/users',         usersRoutes);
 
-// Special nested tiles route
 app.use('/api/users/:userId/tiles', (req, res, next) => {
   req.url = `/user/${req.params.userId}`;
   tilesRoutes(req, res, next);
 });
 
-/* ───────── 404 Not Found ───────── */
 app.use('*', (req, res) =>
   res.status(404).json({ error: 'Route not found', path: req.originalUrl })
 );
 
-/* ───────── Error Handler ───────── */
 app.use((err, req, res, _next) => {
-  console.error('❌ Error:', err);
+  console.error('Error:', err);
   if (err.message?.includes('CORS')) {
     return res.status(403).json({ error: 'CORS', message: err.message });
   }
@@ -142,25 +134,23 @@ app.use((err, req, res, _next) => {
   });
 });
 
-/* ───────── DB & Server Startup ───────── */
 mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('✓ MongoDB connected');
     app.listen(PORT, () => {
-      console.log(`🚀 Server listening on port ${PORT}`);
-      console.log(`🌐 Frontend origin allowed: ${FRONTEND}`);
+      console.log(`Server listening on port ${PORT}`);
+      console.log(`Frontend origin allowed: ${FRONTEND}`);
     });
   })
   .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
+    console.error('MongoDB connection error:', err);
     process.exit(1);
   });
 
-/* ───────── Graceful Shutdown ───────── */
 ['SIGTERM', 'SIGINT'].forEach((sig) =>
   process.on(sig, () => {
-    console.log(`🛑 ${sig} received. Closing server.`);
+    console.log(`${sig} received. Closing server.`);
     mongoose.connection.close(() => process.exit(0));
   })
 );

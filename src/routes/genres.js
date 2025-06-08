@@ -4,7 +4,6 @@ import { getUserSpotifyClient } from '../spotifyClient.js';
 
 const router = express.Router();
 
-/* Static list: the last known /available-genre-seeds output (May 2025) */
 const FALLBACK_SEEDS = [
   'acoustic','afrobeat','alt-rock','alternative','ambient','anime','black-metal',
   'bluegrass','blues','bossanova','brazil','breakbeat','british','cantopop',
@@ -33,7 +32,6 @@ router.get('/api/genre-stats', async (req, res) => {
     const user    = await User.findById(userId);
     const spotify = await getUserSpotifyClient(user);
 
-    /* 1️⃣ Top artists across 3 windows */
     const ranges  = ['short_term','medium_term','long_term'];
     const artists = [];
     for (const r of ranges) {
@@ -41,13 +39,11 @@ router.get('/api/genre-stats', async (req, res) => {
       artists.push(...top.body.items);
     }
 
-    /* 2️⃣ Frequency table */
     const counts = {};
     artists.forEach(a => a.genres.forEach(
       g => (counts[g] = (counts[g] || 0) + 1)
     ));
 
-    /* 3️⃣ Seed-genre list with graceful fallback */
     let seedGenres = FALLBACK_SEEDS;
     try {
       const seedsRes  = await spotify.getAvailableGenreSeeds();
@@ -58,11 +54,9 @@ router.get('/api/genre-stats', async (req, res) => {
       console.warn('[genre-stats] seed list 404 - using fallback');
     }
 
-    /* 4️⃣ Partition */
     const listened   = Object.keys(counts);
     const unlistened = seedGenres.filter(g => !listened.includes(g));
 
-    /* 5️⃣ Respond */
     res.json({
       listened:  listened.sort((a,b) => counts[b]-counts[a]),
       histogram: counts,

@@ -1,5 +1,3 @@
-/* src/routes/me.js
-   ------------------------------------------------------------------ */
    import express from 'express';
    import util    from 'util';
    import User    from '../models/User.js';
@@ -8,14 +6,12 @@
    
    const router = express.Router();
    
-   /* ───────── helpers ───────── */
    const inspect = (obj) => util.inspect(obj, { depth: 3, colors: false });
    const MAX_SEEDS = 5;
    
    function trimSeeds({ artists = [], tracks = [], genres = [] }) {
      if (!artists.length && !tracks.length && !genres.length) return null;
    
-     // Try to distribute seeds evenly across types
      const totalTypes = [artists, tracks, genres].filter(arr => arr.length > 0).length;
      const seedsPerType = Math.floor(MAX_SEEDS / totalTypes);
      const remainder = MAX_SEEDS % totalTypes;
@@ -25,7 +21,6 @@
      let pickedGenres = [];
      let extraSeeds = remainder;
    
-     // Distribute evenly first
      if (artists.length > 0) {
        const take = Math.min(seedsPerType + (extraSeeds > 0 ? 1 : 0), artists.length);
        pickedArtists = artists.slice(0, take);
@@ -43,31 +38,27 @@
        pickedGenres = genres.slice(0, take);
      }
    
-     // Fill remaining slots if we have space
      const used = pickedArtists.length + pickedTracks.length + pickedGenres.length;
      let remaining = MAX_SEEDS - used;
    
-     // Add more artists if we have room
      if (remaining > 0 && pickedArtists.length < artists.length) {
        const canAdd = Math.min(remaining, artists.length - pickedArtists.length);
        pickedArtists = artists.slice(0, pickedArtists.length + canAdd);
        remaining -= canAdd;
      }
    
-     // Add more tracks if we have room
      if (remaining > 0 && pickedTracks.length < tracks.length) {
        const canAdd = Math.min(remaining, tracks.length - pickedTracks.length);
        pickedTracks = tracks.slice(0, pickedTracks.length + canAdd);
        remaining -= canAdd;
      }
    
-     // Add more genres if we have room
      if (remaining > 0 && pickedGenres.length < genres.length) {
        const canAdd = Math.min(remaining, genres.length - pickedGenres.length);
        pickedGenres = genres.slice(0, pickedGenres.length + canAdd);
      }
    
-     console.log('🔧 trimSeeds distribution:');
+     console.log('trimSeeds distribution:');
      console.log('  - Input: artists:', artists.length, 'tracks:', tracks.length, 'genres:', genres.length);
      console.log('  - Output: artists:', pickedArtists.length, 'tracks:', pickedTracks.length, 'genres:', pickedGenres.length);
    
@@ -80,7 +71,6 @@
      };
    }
    
-   /* ───────── GET /api/me – get current user profile ───────── */
    router.get('/api/me', async (req, res) => {
      try {
        if (!req.session.userId) {
@@ -92,7 +82,6 @@
          return res.status(401).json({ error: 'User not found' });
        }
    
-       // Return user profile data (without sensitive info)
        res.json({
          _id: user._id,
          displayName: user.displayName || user.name || '',
@@ -100,7 +89,6 @@
          avatar: user.avatar || '',
          email: user.email,
          spotifyId: user.spotifyId,
-         // Add any other profile fields you need
        });
      } catch (err) {
        console.error('[GET /api/me Error]', err);
@@ -108,7 +96,6 @@
      }
    });
    
-   /* ───────── PATCH /api/me – update current user profile ───────── */
    router.patch('/api/me', async (req, res) => {
      try {
        if (!req.session.userId) {
@@ -117,7 +104,6 @@
    
        const { displayName, bio, avatar } = req.body;
        
-       // Basic validation
        if (displayName && displayName.length > 100) {
          return res.status(400).json({ error: 'Display name too long' });
        }
@@ -130,7 +116,6 @@
          return res.status(400).json({ error: 'Avatar must be a valid URL' });
        }
    
-       // Update user in database
        const updatedUser = await User.findByIdAndUpdate(
          req.session.userId,
          {
@@ -139,8 +124,8 @@
            ...(avatar !== undefined && { avatar }),
          },
          { 
-           new: true, // Return updated document
-           runValidators: true // Run schema validation
+           new: true,
+           runValidators: true
          }
        );
    
@@ -148,9 +133,8 @@
          return res.status(404).json({ error: 'User not found' });
        }
    
-       console.log('✅ Profile updated for user:', updatedUser._id);
+       console.log('Profile updated for user:', updatedUser._id);
    
-       // Return updated profile data (without sensitive info)
        res.json({
          _id: updatedUser._id,
          displayName: updatedUser.displayName || updatedUser.name || '',
@@ -165,7 +149,6 @@
      }
    });
    
-   /* ───────── GET /api/me/spotify – profile + tops + recent ───────── */
    router.get('/api/me/spotify', async (req, res) => {
      try {
        const user = await User.findById(req.session.userId);
@@ -207,10 +190,6 @@
      }
    });
    
-   /* ───────── GET /api/recommendations with AUTH DEBUG ───────── */
-   /* ───────── SPOTIFY RECOMMENDATIONS WORKAROUND ───────── */
-   /* Replace your current /api/recommendations endpoint with this */
-   
    router.get('/api/recommendations', async (req, res) => {
      try {
        const user = await User.findById(req.session.userId);
@@ -219,9 +198,8 @@
          return res.status(403).json({ error: 'Spotify not connected' });
    
        const spotify = await getUserSpotifyClient(user);
-       console.log('🎯 Generating recommendations using workaround...');
+       console.log('Generating recommendations using workaround...');
    
-       // Strategy 1: Get user's top artists and find related artists
        const [topArtists, topTracks, recentTracks] = await Promise.all([
          spotify.getMyTopArtists({ limit: 10, time_range: 'medium_term' }),
          spotify.getMyTopTracks({ limit: 15, time_range: 'medium_term' }),
@@ -231,16 +209,14 @@
        const recommendations = [];
        const usedTrackIds = new Set();
        
-       // Add user's existing tracks to avoid duplicates
        topTracks.body.items?.forEach(track => usedTrackIds.add(track.id));
        recentTracks.body.items?.forEach(item => usedTrackIds.add(item.track.id));
    
-       console.log(`📊 Found ${topArtists.body.items?.length || 0} top artists`);
+       console.log(`Found ${topArtists.body.items?.length || 0} top artists`);
    
-       // Method 1: Related Artists -> Top Tracks
        for (const artist of topArtists.body.items?.slice(0, 4) || []) {
          try {
-           console.log(`🔍 Finding related artists for ${artist.name}`);
+           console.log(`Finding related artists for ${artist.name}`);
            const related = await spotify.getArtistRelatedArtists(artist.id);
            
            for (const relatedArtist of related.body.artists?.slice(0, 3) || []) {
@@ -257,15 +233,14 @@
                  }
                }
              } catch (err) {
-               console.log(`⚠️ Failed to get top tracks for ${relatedArtist.name}`);
+               console.log(`Failed to get top tracks for ${relatedArtist.name}`);
              }
            }
          } catch (err) {
-           console.log(`⚠️ Failed to get related artists for ${artist.name}`);
+           console.log(`Failed to get related artists for ${artist.name}`);
          }
        }
    
-       // Method 2: Artists from user's tracks -> More albums
        const artistsFromTracks = new Set();
        topTracks.body.items?.forEach(track => {
          track.artists?.forEach(artist => artistsFromTracks.add(artist.id));
@@ -287,7 +262,6 @@
                
                for (const track of albumTracks.body.items || []) {
                  if (!usedTrackIds.has(track.id) && recommendations.length < 20) {
-                   // Get full track info since album tracks don't have complete data
                    try {
                      const fullTrack = await spotify.getTrack(track.id);
                      recommendations.push({
@@ -296,22 +270,20 @@
                      });
                      usedTrackIds.add(track.id);
                    } catch (err) {
-                     console.log(`⚠️ Failed to get full track info for ${track.id}`);
+                     console.log(`Failed to get full track info for ${track.id}`);
                    }
                  }
                }
              } catch (err) {
-               console.log(`⚠️ Failed to get tracks from album ${album.id}`);
+               console.log(`Failed to get tracks from album ${album.id}`);
              }
            }
          } catch (err) {
-           console.log(`⚠️ Failed to get albums for artist ${artistId}`);
+           console.log(`Failed to get albums for artist ${artistId}`);
          }
        }
-   
-       // Method 3: Featured Playlists (if we still need more tracks)
        if (recommendations.length < 15) {
-         console.log('🎧 Adding tracks from featured playlists...');
+         console.log('Adding tracks from featured playlists...');
          try {
            const featured = await spotify.getFeaturedPlaylists({ limit: 5, country: 'US' });
            
@@ -332,25 +304,24 @@
                  }
                }
              } catch (err) {
-               console.log(`⚠️ Failed to get tracks from playlist ${playlist.id}`);
+               console.log(`Failed to get tracks from playlist ${playlist.id}`);
              }
            }
          } catch (err) {
-           console.log('⚠️ Failed to get featured playlists');
+           console.log('Failed to get featured playlists');
          }
        }
    
-       // Shuffle and limit results
        const finalRecommendations = recommendations
          .sort(() => Math.random() - 0.5)
          .slice(0, 20);
    
-       console.log(`✅ Generated ${finalRecommendations.length} recommendations`);
+       console.log(`Generated ${finalRecommendations.length} recommendations`);
        
        res.json(finalRecommendations);
    
      } catch (error) {
-       console.error('❌ Recommendations workaround error:', error);
+       console.error('Recommendations workaround error:', error);
        res.status(500).json({ 
          error: 'Failed to generate recommendations',
          details: error.message 
@@ -358,7 +329,6 @@
      }
    });
    
-   /* ───────── Genre-based Discovery (Alternative approach) ───────── */
    router.get('/api/discover/:method', async (req, res) => {
      try {
        const user = await User.findById(req.session.userId);
@@ -389,7 +359,7 @@
            break;
    
          case 'categories':
-           console.log('🏷️ Getting category playlists...');
+           console.log('Getting category playlists...');
            const categories = await spotify.getCategories({ limit: 5, country: 'US' });
            
            for (const category of categories.body.categories?.items || []) {
@@ -418,7 +388,7 @@
            break;
    
          case 'featured':
-           console.log('⭐ Getting featured playlists...');
+           console.log('Getting featured playlists...');
            const featured = await spotify.getFeaturedPlaylists({ limit: 10, country: 'US' });
            
            for (const playlist of featured.body.playlists?.items || []) {
@@ -442,7 +412,6 @@
            return res.status(400).json({ error: 'Invalid discovery method' });
        }
    
-       // Shuffle results
        const shuffledTracks = tracks
          .sort(() => Math.random() - 0.5)
          .slice(0, 20);
@@ -454,7 +423,7 @@
        });
    
      } catch (error) {
-       console.error(`❌ Discovery method ${req.params.method} error:`, error);
+       console.error(`Discovery method ${req.params.method} error:`, error);
        res.status(500).json({ 
          error: 'Failed to discover music',
          details: error.message 
@@ -462,7 +431,6 @@
      }
    });
    
-   /* ───────── GET /api/recent – 20 most-recent plays ───────── */
    router.get('/api/recent', async (req, res) => {
      try {
        const user = await User.findById(req.session.userId);
@@ -479,7 +447,6 @@
      }
    });
    
-   /* ───────── placeholder friend-activity feed ───────── */
    router.get('/api/friends/activity', async (req, res) => {
      try {
        const me = await User.findById(req.session.userId);
