@@ -242,10 +242,3 @@
   updatedAt: Date
 }
 ```
-
-curl http://localhost:8080/spotify/artist/<spotify_artist_id>/albums
-
-✅ Get track or playlist info
-
-curl http://localhost:8080/spotify/track/<spotify_track_id>
-curl http://localhost:8080/spotify/playlist/<spotify_playlist_id>
