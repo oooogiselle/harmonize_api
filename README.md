@@ -1,157 +1,247 @@
-📘 USERS
-✅ Create a user
+# Backend Data Model Documentation
 
-Creates a new user profile with top artists and location.
+## Framework & Technology Stack
+- **Framework:** Express.js
+- **Database:** MongoDB (via Mongoose)
+- **Authentication:** Session-based with Spotify OAuth integration
+- **External APIs:** Spotify Web API, Ticketmaster API, OpenCage Geocoding API
 
-curl -X POST http://localhost:8080/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "may",
-    "email": "may@example.com",
-    "passwordHash": "hashed_pw",
-    "bio": "music addict",
-    "profileImage": "https://image.link/profile.jpg",
-    "topArtists": ["Rina Sawayama", "Joji", "Charli XCX"],
-    "location": {
-      "type": "Point",
-      "coordinates": [-118.2437, 34.0522],
-      "city": "Los Angeles"
-    }
-  }'
+## API Endpoints
 
-✅ Update user fields (bio, friends, etc.)
+### Authentication
+- `POST /auth/register` - User registration
+- `POST /auth/login` - User login
+- `POST /auth/logout` - User logout
+- `GET /auth/spotify/login` - Spotify OAuth login
+- `GET /auth/spotify/callback` - Spotify OAuth callback
+- `GET /auth/api/me` - Get current user profile
 
-Updates any field of a user, including appending friends.
+### Users
+- `GET /users` - Get all users
+- `GET /users/search` - Search users (authenticated)
+- `GET /users/:id` - Get user profile
+- `POST /users/:id/follow` - Follow user (authenticated)
+- `DELETE /users/:id/follow` - Unfollow user (authenticated)
+- `GET /users/:id/following` - Get user's following list
+- `GET /users/:id/followers` - Get user's followers list
+- `POST /users/location` - Update user location (authenticated)
 
-curl -X PATCH http://localhost:8080/users/<user_id> \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bio": "Updated bio here",
-    "friends": ["<friend_user_id>"]
-  }'
+### Artists
+- `GET /artists` - Get all artists
+- `POST /artists` - Create artist
+- `GET /artists/spotify/search` - Search Spotify artists
+- `GET /artists/spotify/:id` - Get Spotify artist data
+- `PATCH /artists/:id/follow` - Follow/unfollow artist
+- `PATCH /artists/:id/bio` - Update artist bio
 
-✅ Add a favorite track
+### Music Posts
+- `GET /posts` - Get all music posts
+- `POST /posts` - Create music post (authenticated)
+- `GET /posts/spotify/search` - Search Spotify tracks
+- `POST /posts/:id/like` - Like music post (authenticated)
+- `POST /posts/:id/unlike` - Unlike music post (authenticated)
+- `GET /posts/my-posts` - Get user's posts (authenticated)
 
-Adds a track to a user’s list of favorite tracks.
+### Spotify Integration
+- `GET /spotify/search` - Search Spotify (artists/tracks)
+- `GET /spotify/top-artists` - Get user's top artists (authenticated)
+- `GET /spotify/user/:id` - Get friend's Spotify data
+- `GET /spotify/friends/top` - Get friends' top music (authenticated)
 
-curl -X PATCH http://localhost:8080/users/<user_id>/favorite \
-  -H "Content-Type: application/json" \
-  -d '{"trackId": "<track_id>"}'
+### Music Discovery & Recommendations
+- `GET /api/me/spotify` - Get user's Spotify profile + top music
+- `GET /api/recommendations` - Get personalized recommendations
+- `GET /api/discover/:method` - Alternative discovery methods
+- `GET /api/recent` - Get recently played tracks
+- `GET /api/genre-stats` - Get user's genre statistics
+- `GET /api/genre-timeline` - Get genre listening timeline
 
-✅ Get all users
+### Events
+- `GET /events` - Get all events
+- `POST /events` - Create event
+- `GET /ticketmaster/events?lat=...&lng=...&radius=...` - Get Ticketmaster events by location (coordinates)
 
-Returns all users in the system.
+### Tiles (Dashboard)
+- `GET /tiles` - Get user's tiles
+- `POST /tiles` - Create tile (authenticated)
+- `PATCH /tiles/:id` - Update tile (authenticated)
+- `DELETE /tiles/:id` - Delete tile (authenticated)
+- `PATCH /tiles/bulk-layout` - Bulk update tile positions
 
-curl http://localhost:8080/users
+### Utilities
+- `GET /geocode/reverse` - Reverse geocoding (lat/lng to city)
 
-✅ Get a specific user with populated fields
+## Data Models
 
-Returns user data including favorite tracks and friend usernames.
+### User
+```
+{
+  displayName: String,      // Display name
+  username: String,         // Unique username (lowercase)
+  bio: String,             // User biography
+  avatar: String,          // Profile picture URL
+  email: String,           // Email address (unique, sparse)
+  password: String,        // Hashed password
+  accountType: String,     // 'user' | 'artist'
+  
+  // Spotify Integration
+  spotifyId: String,       // Spotify user ID (unique, sparse)
+  spotifyAccessToken: String,
+  spotifyRefreshToken: String,
+  spotifyTokenExpiresAt: Date,
+  
+  // Social Features
+  followers: [ObjectId],   // Users following this user (ref: User)
+  following: [ObjectId],   // Users followed by this user (ref: User)
+  
+  // Location (GeoJSON Point)
+  location: {
+    type: 'Point',
+    coordinates: [Number]  // [longitude, latitude], default [0, 0]
+  },
+  
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 
-curl http://localhost:8080/users/<user_id>
+### Artist
+```
+{
+  artistName: String,      // Artist name
+  bio: String,            // Artist biography
+  spotifyId: String,      // Spotify artist ID
+  profilePic: String,     // Profile picture URL
+  followers: [String],    // User IDs following this artist
+  
+  // Spotify Data
+  albums: [{             // Album information
+    id: String,
+    name: String,
+    cover: String,
+    year: String,
+    images: [{ url: String }]
+  }],
+  topTracks: [{          // Top tracks
+    id: String,
+    name: String,
+    popularity: Number,
+    album: { images: [{ url: String }] }
+  }]
+}
+```
+### Music Post
+```
+{
+  spotifyTrackId: String,  // Spotify track ID (required)
+  title: String,          // Track title (required)
+  artist: String,         // Artist name(s) (required)
+  genre: String,          // Music genre
+  coverUrl: String,       // Album cover URL
+  previewUrl: String,     // 30s preview URL from Spotify
+  duration: Number,       // Track duration in seconds
+  caption: String,        // User's caption/description
+  tags: [String],         // Post tags
+  uploadedBy: ObjectId,   // User who posted (ref: User)
+  playCount: Number,      // Play count (default: 0)
+  likes: Number,          // Like count (default: 0)
+  likedBy: [ObjectId],    // Users who liked (ref: User)
+  createdAt: Date
+}
+```
 
-🎵 TRACKS
-✅ Create a new track
+### Event
+```
+{
+  spotifyTrackId: String,  // Spotify track ID (required)
+  title: String,          // Track title (required)
+  artist: String,         // Artist name(s) (required)
+  genre: String,          // Music genre
+  coverUrl: String,       // Album cover URL
+  previewUrl: String,     // 30s preview URL from Spotify
+  duration: Number,       // Track duration in seconds
+  caption: String,        // User's caption/description
+  tags: [String],         // Post tags
+  uploadedBy: ObjectId,   // User who posted (ref: User)
+  playCount: Number,      // Play count (default: 0)
+  likes: Number,          // Like count (default: 0)
+  likedBy: [ObjectId],    // Users who liked (ref: User)
+  createdAt: Date
+}
+```
 
-Creates a track linked to an artist, with tags and initial comments.
+### Track
+```
+{
+  spotifyTrackId: String,  // Spotify track ID (required)
+  title: String,          // Track title (required)
+  artist: String,         // Artist name(s) (required)
+  genre: String,          // Music genre
+  coverUrl: String,       // Album cover URL
+  previewUrl: String,     // 30s preview URL from Spotify
+  duration: Number,       // Track duration in seconds
+  caption: String,        // User's caption/description
+  tags: [String],         // Post tags
+  uploadedBy: ObjectId,   // User who posted (ref: User)
+  playCount: Number,      // Play count (default: 0)
+  likes: Number,          // Like count (default: 0)
+  likedBy: [ObjectId],    // Users who liked (ref: User)
+  createdAt: Date
+}
+```
 
-curl -X POST http://localhost:8080/tracks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Let It Happen",
-    "artistId": "<artist_id>",
-    "audioUrl": "https://audio.link/let-it-happen.mp3",
-    "coverArtUrl": "https://image.link/cover.jpg",
-    "tags": ["psychedelic", "indie"],
-    "visibility": "public",
-    "comments": [
-      {
-        "userId": "<user_id>",
-        "content": "Amazing song!",
-        "timestamp": "2025-05-20T04:00:00Z"
-      }
-    ]
-  }'
+### Tile
+```
+{
+  userId: ObjectId,       // User who owns the tile (required, ref: User)
+  type: String,          // Tile type (required)
+  title: String,         // Tile title
+  content: String,       // Tile content
+  bgImage: String,       // Background image URL
+  bgColor: String,       // Background color
+  font: String,          // Font family
+  x: Number,             // Grid X position
+  y: Number,             // Grid Y position
+  w: Number,             // Grid width
+  h: Number,             // Grid height
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 
-✅ Get all tracks
+### MusicTasteGraph
+```
+{
+  user1: ObjectId,           // First user reference (required, ref: User)
+  user2: ObjectId,           // Second user reference (required, ref: User)
+  overlapScore: Number,      // Compatibility score
+  sharedArtists: [String],   // Common artist IDs
+  differentGenres: [String], // Differing genres
+  generatedAt: Date          // Generation timestamp (default: Date.now)
+}
+```
 
-Returns all tracks, optionally with artist info and comments.
+### Friends
+```
+{
+  userId: ObjectId,       // User who initiated friendship (required, ref: User)
+  friendId: ObjectId,     // User who was friended (required, ref: User)
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 
-curl http://localhost:8080/tracks
-
-✅ Like a track
-
-Adds a user’s ID to the likes array for the given track.
-
-curl -X PATCH http://localhost:8080/tracks/<track_id>/like \
-  -H "Content-Type: application/json" \
-  -d '{"userId": "<user_id>"}'
-
-✅ Comment on a track
-
-Adds a new comment to the track.
-
-curl -X PATCH http://localhost:8080/tracks/<track_id>/comment \
-  -H "Content-Type: application/json" \
-  -d '{"userId": "<user_id>", "content": "Still my favorite!"}'
-
-🧠 BLEND
-✅ Compare music taste between two users
-
-Creates and stores a blend graph of two users’ top artist overlap.
-
-curl http://localhost:8080/blend/<user1_id>/<user2_id>
-
-🎤 ARTISTS
-✅ Create a new artist (linked to a user)
-
-Creates an artist profile linked to a userId.
-
-curl -X POST http://localhost:8080/artists \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "<user_id>",
-    "artistName": "Tame Impala",
-    "bio": "Psychedelic project",
-    "tags": ["psychedelic", "indie"],
-    "merchLinks": ["https://shop.tameimpala.com"],
-    "profilePic": "https://image.link/profile.jpg"
-  }'
-
-📅 EVENTS
-✅ Create an event
-
-Creates an event for an artist at a specific location and time.
-
-curl -X POST http://localhost:8080/events \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Live at Red Rocks",
-    "artistId": "<artist_id>",
-    "location": {
-      "type": "Point",
-      "coordinates": [-105.2057, 39.6654]
-    },
-    "date": "2025-07-25T02:00:00Z",
-    "description": "Tame Impala under the stars at Red Rocks"
-  }'
-
-✅ Get all events
-
-Returns all stored events.
-
-curl http://localhost:8080/events
-
-🔍 SPOTIFY (Read-only catalog access)
-✅ Search artists, albums, tracks, playlists
-
-curl 'http://localhost:8080/spotify/search?q=Tame+Impala&type=artist'
-
-✅ Get artist info by ID
-
-curl http://localhost:8080/spotify/artist/<spotify_artist_id>
-
-✅ Get artist albums
+### Playlist
+```
+{
+  userId: ObjectId,       // Playlist owner (required, ref: User)
+  name: String,          // Playlist name (required)
+  trackIds: [ObjectId],  // Track references (ref: Track)
+  isPublic: Boolean,     // Public visibility (default: false)
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 
 curl http://localhost:8080/spotify/artist/<spotify_artist_id>/albums
 
